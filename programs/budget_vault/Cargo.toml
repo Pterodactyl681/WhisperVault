@@ -1,0 +1,20 @@
+[package]
+name = "budget_vault"
+version = "0.1.0"
+description = "Stretch-path Anchor BudgetVault policy accounting for WhisperPay Agent Vaults"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "budget_vault"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+idl-build = ["anchor-lang/idl-build"]
+default = []
+
+[dependencies]
+anchor-lang = "0.31.1"

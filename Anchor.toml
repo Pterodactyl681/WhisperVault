@@ -1,0 +1,22 @@
+# Stretch-path Anchor workspace for WhisperPay Agent Vault policy accounting.
+# This is intentionally isolated from the working off-chain MVP and is not wired into the app yet.
+
+[features]
+resolution = true
+skip-lint = false
+
+[toolchain]
+anchor_version = "0.31.1"
+
+[programs.localnet]
+budget_vault = "FgZ3QRTju3jCdmGaznHpH8MiKjcfPwoPrHPquyytV8QB"
+
+[provider]
+cluster = "Localnet"
+wallet = "~/.config/solana/id.json"
+
+[workspace]
+members = ["programs/budget_vault"]
+
+[scripts]
+test = "cargo test -p budget_vault"
