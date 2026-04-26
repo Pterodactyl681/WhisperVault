@@ -9,8 +9,8 @@ import { LocaleProvider } from "@/components/providers/locale-provider";
 import { SolanaWalletProvider } from "@/components/providers/solana-wallet-provider";
 
 export const metadata: Metadata = {
-  title: "WhisperPay",
-  description: "Private Solana paylinks with MagicBlock-aware routing and reveal-gated notes.",
+  title: "WhisperVault",
+  description: "Agent Spend Firewall for private Claude/Mirage agents on Solana devnet.",
   icons: {
     icon: "/icon.png?v=4",
     shortcut: "/icon.png?v=4",
