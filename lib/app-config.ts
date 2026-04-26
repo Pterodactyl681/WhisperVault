@@ -159,7 +159,7 @@ export const appConfig: AppConfig = {
     links: {
       twitterX: "https://x.com/Nurarihyasa",
       github: "https://github.com/Pterodactyl681",
-      docs: "https://github.com/Pterodactyl681/whisperpay#readme"
+      docs: "https://github.com/Pterodactyl681/whispervault#readme"
     }
   }
 };
