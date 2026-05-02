@@ -293,6 +293,41 @@ test("created paylink and payment intent include agent metadata", async () => {
   });
 
   assert.deepEqual(paymentIntent?.metadata?.agentPlan, paylink?.metadata?.agentPlan);
+  assert.equal(paylink?.metadata?.telegram, undefined);
+  assert.equal(paymentIntent?.metadata?.telegram, undefined);
+});
+
+test("public agent plan API rejects injected telegram metadata", async () => {
+  const { budgetService, paylinkService, handlers } = createHarness();
+  await createBudget(budgetService);
+
+  const response = await handlers.createPlan(
+    new Request("http://localhost/api/agent-plan", withOwner("owner-alpha", {
+      method: "POST",
+      body: JSON.stringify({
+        agentId: "coffee-agent",
+        goal: "buy coffee for 5 USDC",
+        amount: "5",
+        mint: "USDC_OR_MINT_ADDRESS",
+        recipient: VALID_RECIPIENT,
+        telegram: {
+          source: "telegram",
+          telegramUserId: "777",
+          telegramChatId: "987654321"
+        }
+      })
+    }))
+  );
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await readJson(response), {
+    error: {
+      code: "invalid_request",
+      message: "telegram metadata is only allowed for Telegram command spends."
+    }
+  });
+  assert.equal((await paylinkService.listPaylinks()).length, 0);
+  assert.equal((await paylinkService.listPaymentIntents()).length, 0);
 });
 
 test("agent spend metadata is available to private memo reveal context", async () => {
