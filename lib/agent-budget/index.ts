@@ -1,5 +1,6 @@
 export * from "./types";
 export * from "./repository";
+export * from "./database-repository";
 export * from "./service";
 export * from "./policy-config";
 export * from "./policy-adapter";

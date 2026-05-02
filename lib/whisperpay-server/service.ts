@@ -10,7 +10,8 @@ import type {
   ServerPaymentIntentMetadata,
   ServerPaymentIntentStatusChange,
   ServerPaylink,
-  ServerPaylinkMetadata
+  ServerPaylinkMetadata,
+  ServerTelegramSpendMetadata
 } from "./types";
 import {
   checkAgentSpendMemoRevealAccess,
@@ -57,6 +58,7 @@ interface CreateAgentPlanArtifactsInput {
   allowPublicFallback: boolean;
   budgetPolicySnapshot: AgentPlanMetadata["budgetPolicySnapshot"];
   fromWallet: string;
+  telegram?: ServerTelegramSpendMetadata;
 }
 
 interface ConfirmManualAgentSpendInput {
@@ -211,6 +213,7 @@ export class WhisperPayServerService {
         memoReveal: "permissioned",
         mode: "manual"
       },
+      ...(input.telegram ? { source: "telegram" as const, telegram: clone(input.telegram) } : {}),
       ...(input.category ? { category: input.category } : {})
     };
 
@@ -224,7 +227,8 @@ export class WhisperPayServerService {
           privacyMode: "private" as const,
           allowPublicFallback: input.allowPublicFallback
         }),
-        agentPlan: agentPlanMetadata
+        agentPlan: agentPlanMetadata,
+        ...(input.telegram ? { telegram: clone(input.telegram) } : {})
       }
     };
     const savedPaylink = await this.repository.updatePaylink(paylinkWithMetadata);
@@ -247,7 +251,8 @@ export class WhisperPayServerService {
         privacyMode: "private",
         allowPublicFallback: input.allowPublicFallback,
         agentPlan: agentPlanMetadata,
-        memo: agentPlanMetadata.memo
+        memo: agentPlanMetadata.memo,
+        ...(input.telegram ? { telegram: clone(input.telegram) } : {})
       },
       magicPrivate:
         input.rail === "magicblock-private"

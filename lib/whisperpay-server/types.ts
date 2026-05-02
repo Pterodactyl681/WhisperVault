@@ -27,6 +27,14 @@ export interface AgentPlanReceiptMetadata {
   mode: "manual";
 }
 
+export interface ServerTelegramSpendMetadata {
+  source: "telegram";
+  telegramUserId: string;
+  telegramChatId: string;
+  controllerWallet: string;
+  originalTelegramCommand?: string;
+}
+
 export interface AgentPlanMetadata {
   agentId: string;
   category?: string;
@@ -38,6 +46,8 @@ export interface AgentPlanMetadata {
   memo: string;
   privateRail?: AgentPlanPrivateRailMetadata;
   receipt?: AgentPlanReceiptMetadata;
+  source?: "telegram";
+  telegram?: ServerTelegramSpendMetadata;
 }
 
 export interface AgentPaymentLifecycleState {
@@ -85,6 +95,7 @@ export interface ServerPaylinkMetadata {
   privacyMode: AgentPlanPrivacyMode;
   allowPublicFallback: boolean;
   agentPlan?: AgentPlanMetadata;
+  telegram?: ServerTelegramSpendMetadata;
   unusableReason?: string | null;
 }
 
@@ -109,6 +120,7 @@ export interface ServerPaymentIntentMetadata {
   agentLifecycle?: AgentPaymentLifecycleState;
   timeline?: ServerPaymentLifecycleEvent[];
   manualExecution?: ServerManualExecutionMetadata;
+  telegram?: ServerTelegramSpendMetadata;
 }
 
 export interface ServerPaymentIntent extends PublicPayment {

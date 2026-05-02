@@ -300,6 +300,285 @@ Mirage command: not generated
 
 ---
 
+## Full Telegram Agent Demo
+
+This is the complete operator flow for:
+
+- WhisperVault UI on local dev or Vercel
+- Telegram bot webhook commands
+- Agent Worker dry-run and real execution
+- Mirage devnet transfer execution
+- receipt confirmation and Telegram push
+
+Important guardrails:
+
+- Mirage execution stays in the Agent Worker only.
+- Vercel or Next.js API routes do not execute Mirage.
+- Telegram webhook handling does not execute Mirage.
+- Browser UI does not custody private keys.
+
+### 1. Create a Telegram bot with BotFather
+
+In Telegram:
+
+1. Open `@BotFather`.
+2. Send `/newbot`.
+3. Pick a bot name and username.
+4. Copy the bot token.
+5. Optional but recommended: send `/setdescription` and `/setabouttext` so operators can recognize the bot.
+
+### 2. Configure env
+
+Local `.env` or `.env.local` baseline:
+
+```txt
+STORAGE_MODE=local
+AGENT_BUDGET_POLICY_MODE=offchain
+TELEGRAM_BOT_TOKEN=<botfather-token>
+TELEGRAM_WEBHOOK_SECRET=<random-shared-secret>
+WHISPERVAULT_BASE_URL=http://localhost:3000
+WHISPERVAULT_WORKER_SECRET=<shared-worker-secret>
+AGENT_WALLET_NAME=agent-treasury
+MIRAGE_EXECUTION_ENABLED=false
+```
+
+Database-backed or Vercel-hosted control plane:
+
+```txt
+STORAGE_MODE=database
+SUPABASE_URL=<supabase-rest-url>
+SUPABASE_SERVICE_ROLE_KEY=<supabase-service-role-key>
+AGENT_BUDGET_POLICY_MODE=offchain
+TELEGRAM_BOT_TOKEN=<botfather-token>
+TELEGRAM_WEBHOOK_SECRET=<random-shared-secret>
+WHISPERVAULT_BASE_URL=https://<your-app>.vercel.app
+WHISPERVAULT_WORKER_SECRET=<shared-worker-secret>
+AGENT_WALLET_NAME=agent-treasury
+MIRAGE_EXECUTION_ENABLED=false
+```
+
+Quick operator check:
+
+```powershell
+npm.cmd run demo:telegram:check
+```
+
+### 3. Set Vercel env vars if hosting the UI/control plane there
+
+Add these in the Vercel project settings:
+
+- `STORAGE_MODE=database`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `AGENT_BUDGET_POLICY_MODE=offchain`
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_WEBHOOK_SECRET`
+- `WHISPERVAULT_BASE_URL=https://<your-app>.vercel.app`
+- `WHISPERVAULT_WORKER_SECRET`
+
+Do not enable Mirage execution in Vercel. Keep the worker on an operator machine or other trusted runtime that already runs the existing worker flow.
+
+### 4. Start WhisperVault
+
+Local UI:
+
+```powershell
+npm.cmd run demo:agent-vault:reset
+npm.cmd run demo:agent-vault:seed
+npm.cmd run dev
+```
+
+Hosted UI:
+
+```powershell
+npm.cmd run build
+```
+
+Deploy the existing Next.js app to Vercel after env configuration.
+
+### 5. Set the Telegram webhook
+
+Inspect current webhook state:
+
+```powershell
+npm.cmd run telegram:webhook:info
+```
+
+Set the webhook manually with `curl`:
+
+Local tunnel or public URL:
+
+```powershell
+curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" -H "Content-Type: application/json" -d "{\"url\":\"https://<public-base-url>/api/telegram/webhook\",\"secret_token\":\"<TELEGRAM_WEBHOOK_SECRET>\"}"
+```
+
+Vercel-hosted URL:
+
+```powershell
+curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" -H "Content-Type: application/json" -d "{\"url\":\"https://<your-app>.vercel.app/api/telegram/webhook\",\"secret_token\":\"<TELEGRAM_WEBHOOK_SECRET>\"}"
+```
+
+### 6. Connect wallet and create or seed an Agent Vault
+
+In the WhisperVault UI:
+
+1. Open the app.
+2. Connect the controller wallet.
+3. Create an Agent Vault for `coffee-agent` if you are not using the seeded demo.
+4. Use devnet USDC and keep private rail enabled.
+
+The seeded local demo already prepares the `coffee-agent` budget for operator walkthroughs.
+
+### 7. Generate link code and link Telegram
+
+In the UI:
+
+1. Generate a Telegram link code for the connected controller wallet.
+2. In Telegram, send `/link <code>` to the bot.
+3. Wait for the success reply confirming the controller wallet link.
+
+### 8. Send an approved spend from Telegram
+
+In Telegram:
+
+```txt
+/spend 5 buy coffee
+```
+
+Expected reply:
+
+```txt
+Spend Firewall: Passed
+Agent: coffee-agent
+Amount: 5 USDC
+Execution: pending/manual
+Paylink/Receipt id: <paylinkId>
+```
+
+### 9. Run worker dry-run
+
+Dry-run keeps Mirage execution disabled and does not confirm the receipt:
+
+```powershell
+$env:WHISPERVAULT_BASE_URL="http://localhost:3000"
+$env:WHISPERVAULT_WORKER_SECRET="<shared-worker-secret>"
+$env:AGENT_WALLET_NAME="agent-treasury"
+$env:MIRAGE_EXECUTION_ENABLED="false"
+npm.cmd run agent:worker:dry-run
+```
+
+Expected result:
+
+- pending spend is listed
+- `executed=0`
+- `confirmed=0`
+- no Telegram push is sent
+
+### 10. Run worker real execution
+
+Only do this on a machine where Mirage CLI is already installed and the existing worker execution model is allowed:
+
+```powershell
+$env:WHISPERVAULT_BASE_URL="http://localhost:3000"
+$env:WHISPERVAULT_WORKER_SECRET="<shared-worker-secret>"
+$env:AGENT_WALLET_NAME="agent-treasury"
+$env:MIRAGE_EXECUTION_ENABLED="true"
+$env:TELEGRAM_BOT_TOKEN="<botfather-token>"
+npm.cmd run agent:worker
+```
+
+Expected worker behavior:
+
+- fetch pending spend
+- validate Mirage argv
+- execute Mirage locally
+- confirm receipt through `/api/agent-spend/confirm-manual`
+- send Telegram push if the spend came from Telegram
+
+### 11. Verify Telegram push and receipt
+
+Expected Telegram push after successful worker confirmation:
+
+```txt
+Execution confirmed
+Agent: coffee-agent
+Amount: 5 USDC
+Devnet tx: <signature>
+Receipt: confirmed
+```
+
+Then in Telegram:
+
+```txt
+/receipt <paylinkId>
+```
+
+Expected receipt status:
+
+- `Status: confirmed`
+- `Execution status: confirmed/manual`
+- `Tx signature: <signature>`
+
+### 12. Verify blocked overspend
+
+In Telegram:
+
+```txt
+/spend 100 buy gear
+```
+
+Expected result:
+
+```txt
+Spend Firewall: Blocked
+Reason: Requested spend exceeds the remaining daily cap.
+Private spend: none
+Mirage command: not generated
+```
+
+### Local demo command sequence
+
+```powershell
+npm.cmd run demo:telegram:check
+npm.cmd run demo:agent-vault:reset
+npm.cmd run demo:agent-vault:seed
+npm.cmd run dev
+npm.cmd run agent:worker:dry-run
+```
+
+Real execution after approval:
+
+```powershell
+$env:MIRAGE_EXECUTION_ENABLED="true"
+npm.cmd run agent:worker
+```
+
+### Vercel plus worker command sequence
+
+Control plane:
+
+```powershell
+npm.cmd run demo:telegram:check
+npm.cmd run telegram:webhook:info
+npm.cmd run build
+```
+
+Worker machine:
+
+```powershell
+$env:WHISPERVAULT_BASE_URL="https://<your-app>.vercel.app"
+$env:WHISPERVAULT_WORKER_SECRET="<shared-worker-secret>"
+$env:AGENT_WALLET_NAME="agent-treasury"
+$env:TELEGRAM_BOT_TOKEN="<botfather-token>"
+$env:MIRAGE_EXECUTION_ENABLED="false"
+npm.cmd run agent:worker:dry-run
+
+$env:MIRAGE_EXECUTION_ENABLED="true"
+npm.cmd run agent:worker
+```
+
+---
+
 ## Validation
 
 ```powershell

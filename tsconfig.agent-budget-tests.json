@@ -18,8 +18,12 @@
   "include": [
     "lib/agent-budget/**/*.ts",
     "lib/agent-plan/**/*.ts",
+    "lib/agent-spend/**/*.ts",
+    "lib/agent-worker/**/*.ts",
     "lib/agent-payment-lifecycle/**/*.ts",
     "lib/agent-vault/**/*.ts",
+    "lib/telegram-link/**/*.ts",
+    "lib/telegram/**/*.ts",
     "lib/mirage/**/*.ts",
     "lib/whisperpay-server/**/*.ts",
     "tests/agent-budget-service.test.ts",
@@ -27,6 +31,12 @@
     "tests/agent-budget-api.test.ts",
     "tests/agent-plan-api.test.ts",
     "tests/agent-payment-lifecycle.test.ts",
+    "tests/telegram-link-service.test.ts",
+    "tests/telegram-link-api.test.ts",
+    "tests/telegram-command-service.test.ts",
+    "tests/telegram-webhook.test.ts",
+    "tests/agent-worker.test.ts",
+    "tests/storage-adapter.test.ts",
     "tests/mirage-command-generator.test.ts"
   ],
   "exclude": [

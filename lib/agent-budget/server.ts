@@ -1,3 +1,5 @@
+import { getStorageMode } from "@/lib/storage/config";
+import { SupabaseAgentBudgetRepository } from "./database-repository";
 import { DevFileAgentBudgetRepository, InMemoryAgentBudgetRepository } from "./repository";
 import { AgentBudgetService } from "./service";
 import { getAgentBudgetPolicyAdapter, type AgentBudgetPolicyAdapter } from "./policy-adapter";
@@ -10,13 +12,20 @@ type AgentBudgetGlobal = typeof globalThis & {
 
 const globalForAgentBudget = globalThis as AgentBudgetGlobal;
 
+const createAgentBudgetRepository = () => {
+  if (getStorageMode() === "database") {
+    return new SupabaseAgentBudgetRepository();
+  }
+
+  return process.env.NODE_ENV === "development"
+    ? new DevFileAgentBudgetRepository()
+    : new InMemoryAgentBudgetRepository();
+};
+
 export const agentBudgetService =
   globalForAgentBudget.__whisperPayAgentBudgetService ??
   new AgentBudgetService({
-    repository:
-      process.env.NODE_ENV === "development"
-        ? new DevFileAgentBudgetRepository()
-        : new InMemoryAgentBudgetRepository()
+    repository: createAgentBudgetRepository()
   });
 
 export const agentBudgetPolicyConfig = parseAgentBudgetPolicyConfig();

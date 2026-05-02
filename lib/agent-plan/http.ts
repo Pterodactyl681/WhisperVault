@@ -12,6 +12,7 @@ import {
   parseJsonObject,
   requireOwner
 } from "../agent-vault/http";
+import type { ServerTelegramSpendMetadata } from "../whisperpay-server/types";
 
 type AgentPlanRail = "magicblock-private" | "public-solana";
 
@@ -23,6 +24,7 @@ interface AgentPlanRequest {
   recipient: string;
   category?: string;
   rail: AgentPlanRail;
+  telegram?: Omit<ServerTelegramSpendMetadata, "controllerWallet">;
 }
 
 interface AgentPlanHttpHandlers {
@@ -33,6 +35,7 @@ interface AgentPlanHttpOptions {
   budgetService: AgentBudgetService | AgentBudgetPolicyAdapter;
   paylinkService: WhisperPayServerService;
   isEnabled?: () => boolean;
+  allowTelegramMetadata?: boolean;
 }
 
 const parseAmountString = (value: unknown): string => {
@@ -41,6 +44,36 @@ const parseAmountString = (value: unknown): string => {
   }
 
   return value.trim();
+};
+
+const parseOptionalTelegramSpendMetadata = (
+  value: unknown
+): Omit<ServerTelegramSpendMetadata, "controllerWallet"> | undefined => {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("telegram metadata must be a JSON object.");
+  }
+
+  const record = value as Record<string, unknown>;
+  const source = record.source === "telegram" ? "telegram" : null;
+  const telegramUserId = typeof record.telegramUserId === "string" ? record.telegramUserId.trim() : "";
+  const telegramChatId = typeof record.telegramChatId === "string" ? record.telegramChatId.trim() : "";
+  const originalTelegramCommand =
+    typeof record.originalTelegramCommand === "string" ? record.originalTelegramCommand.trim() : "";
+
+  if (!source || !telegramUserId || !telegramChatId) {
+    throw new Error("telegram metadata requires source, telegramUserId, and telegramChatId.");
+  }
+
+  return {
+    source,
+    telegramUserId,
+    telegramChatId,
+    ...(originalTelegramCommand ? { originalTelegramCommand } : {})
+  };
 };
 
 const parseAgentPlanBody = (body: Record<string, unknown>): AgentPlanRequest => {
@@ -74,14 +107,15 @@ const parseAgentPlanBody = (body: Record<string, unknown>): AgentPlanRequest => 
     mint,
     recipient,
     ...(category ? { category } : {}),
-    rail
+    rail,
+    ...(body.telegram ? { telegram: parseOptionalTelegramSpendMetadata(body.telegram) } : {})
   };
 };
 
 const subtractAmounts = (left: string, right: string): string => (BigInt(left) - BigInt(right)).toString();
 
 export const createAgentPlanHttpHandlers = (options: AgentPlanHttpOptions): AgentPlanHttpHandlers => {
-  const { paylinkService, isEnabled = defaultIsAgentVaultEnabled } = options;
+  const { paylinkService, isEnabled = defaultIsAgentVaultEnabled, allowTelegramMetadata = false } = options;
   const budgetPolicy = asAgentBudgetPolicyAdapter(options.budgetService);
 
   return {
@@ -98,6 +132,10 @@ export const createAgentPlanHttpHandlers = (options: AgentPlanHttpOptions): Agen
 
       try {
         const input = parseAgentPlanBody(await parseJsonObject(request));
+
+        if (input.telegram && !allowTelegramMetadata) {
+          return errorResponse(400, "invalid_request", "telegram metadata is only allowed for Telegram command spends.");
+        }
 
         if (input.rail !== "magicblock-private") {
           return errorResponse(400, "invalid_request", "unsupported rail for MVP agent plan endpoint.");
@@ -163,7 +201,15 @@ export const createAgentPlanHttpHandlers = (options: AgentPlanHttpOptions): Agen
             remainingDailyCapBefore: decision.remainingDailyCap,
             remainingDailyCapAfter
           },
-          fromWallet: budget.agentWallet ?? `agent:${input.agentId}`
+          fromWallet: budget.agentWallet ?? `agent:${input.agentId}`,
+          ...(input.telegram
+            ? {
+                telegram: {
+                  ...input.telegram,
+                  controllerWallet: auth.owner
+                }
+              }
+            : {})
         });
 
         let reservedAmount = input.amount;

@@ -9,11 +9,13 @@ import {
   Copy,
   ExternalLink,
   Loader2,
+  LogOut,
   RefreshCcw,
   Sparkles,
   Vault
 } from "lucide-react";
 import Image from "next/image";
+import { useWallet } from "@solana/wallet-adapter-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -175,6 +177,12 @@ interface RejectedAgentPlanResult {
 
 type AgentPlanResult = ApprovedAgentPlanResult | RejectedAgentPlanResult;
 
+interface TelegramLinkCodePayload {
+  code: string;
+  expiresAt: string;
+  command: string;
+}
+
 const REQUEST_TIMEOUT_MS = 12000;
 const WORKSPACE_VIEWS: WorkspaceView[] = ["create", "spend", "activity"];
 const WORKSPACE_VIEW_LABELS: Record<WorkspaceView, string> = {
@@ -267,6 +275,16 @@ const shortenAddress = (value: string | null | undefined): string => {
   return value.length <= 12 ? value : `${value.slice(0, 4)}...${value.slice(-4)}`;
 };
 
+const formatExpiryDisplay = (iso: string): string => {
+  const timestamp = Date.parse(iso);
+
+  if (Number.isNaN(timestamp)) {
+    return iso;
+  }
+
+  return new Date(timestamp).toLocaleString();
+};
+
 const parseResponseJson = async <T,>(response: Response): Promise<T | null> => {
   const text = await response.text();
 
@@ -317,6 +335,9 @@ export default function AgentBudgetsPageClient() {
   const [manualTxSignature, setManualTxSignature] = useState("");
   const [manualConfirming, setManualConfirming] = useState(false);
   const [manualConfirmError, setManualConfirmError] = useState<string | null>(null);
+  const [telegramLinkCode, setTelegramLinkCode] = useState<TelegramLinkCodePayload | null>(null);
+  const [telegramLinkError, setTelegramLinkError] = useState<string | null>(null);
+  const [generatingTelegramLinkCode, setGeneratingTelegramLinkCode] = useState(false);
   const [tabDirection, setTabDirection] = useState<"forward" | "backward">("forward");
   const previousViewRef = useRef<WorkspaceView>("create");
 
@@ -385,6 +406,9 @@ export default function AgentBudgetsPageClient() {
       setError(null);
       setManualConfirmError(null);
       setManualTxSignature("");
+      setTelegramLinkCode(null);
+      setTelegramLinkError(null);
+      setGeneratingTelegramLinkCode(false);
       setPlanBudgetSelectionTouched(false);
       setPlanForm(initialPlanFormState());
       setBudgetForm(initialBudgetFormState(""));
@@ -741,6 +765,48 @@ export default function AgentBudgetsPageClient() {
     }
   };
 
+  const handleGenerateTelegramLinkCode = async () => {
+    if (!controllerAddress || generatingTelegramLinkCode) {
+      return;
+    }
+
+    setTelegramLinkError(null);
+    setGeneratingTelegramLinkCode(true);
+
+    try {
+      const response = await fetchWithTimeout("/api/telegram/link-code", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-agent-budget-owner": controllerAddress
+        },
+        body: JSON.stringify({
+          controllerWallet: controllerAddress
+        })
+      });
+      const payload =
+        (await parseResponseJson<TelegramLinkCodePayload | { error?: { message?: string } }>(response)) ?? {};
+
+      if (!response.ok) {
+        const message = "error" in payload ? payload.error?.message : null;
+        throw new Error(message ?? "Failed to generate Telegram link code.");
+      }
+
+      const result = payload as TelegramLinkCodePayload;
+      setTelegramLinkCode(result);
+    } catch (linkError) {
+      const message =
+        linkError instanceof Error && linkError.name === "AbortError"
+          ? "Generating link code timed out."
+          : linkError instanceof Error
+            ? linkError.message
+            : "Failed to generate Telegram link code.";
+      setTelegramLinkError(message);
+    } finally {
+      setGeneratingTelegramLinkCode(false);
+    }
+  };
+
   const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, view: WorkspaceView) => {
     if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") {
       return;
@@ -761,6 +827,14 @@ export default function AgentBudgetsPageClient() {
         clipboardMessage={clipboardMessage}
         onChangeView={setActiveView}
         onTabKeyDown={handleTabKeyDown}
+      />
+      <TelegramLinkPanel
+        walletConnected={walletConnected}
+        linkCode={telegramLinkCode}
+        generating={generatingTelegramLinkCode}
+        error={telegramLinkError}
+        onGenerate={() => void handleGenerateTelegramLinkCode()}
+        onCopy={copyText}
       />
 
       <div key={activeView} className="tab-content-transition" data-tab-direction={tabDirection === "backward" ? "backward" : "forward"}>
@@ -838,6 +912,7 @@ function WorkspaceHeader({
   onTabKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>, view: WorkspaceView) => void;
 }) {
   const activeTabIndex = WORKSPACE_VIEWS.indexOf(activeView);
+  const { disconnect, disconnecting } = useWallet();
 
   return (
     <div className="agent-vault-edge grid gap-4 rounded-2xl border border-[rgba(96,118,168,0.14)] bg-[rgba(7,13,25,0.84)] px-4 py-3.5 shadow-[0_18px_70px_rgba(1,6,14,0.22)] backdrop-blur-xl lg:grid-cols-[1fr_auto_1fr] lg:items-center">
@@ -886,15 +961,77 @@ function WorkspaceHeader({
 
       <div className="flex min-w-0 flex-col items-end gap-2">
         {wallet.connected && wallet.address ? (
-          <span className="rounded-full border border-[rgba(78,215,255,0.26)] bg-[rgba(78,215,255,0.08)] px-3 py-1 text-xs font-medium text-primary">
-            Controller {shortenAddress(wallet.address)}
-          </span>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className="rounded-full border border-[rgba(78,215,255,0.26)] bg-[rgba(78,215,255,0.08)] px-3 py-1 text-xs font-medium text-primary">
+              Controller {shortenAddress(wallet.address)}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void disconnect()}
+              disabled={disconnecting}
+              aria-label="Disconnect wallet"
+              title="Disconnect wallet"
+              className="min-h-8 rounded-full px-2.5 py-1 text-xs"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              {disconnecting ? "Disconnecting..." : "Disconnect"}
+            </Button>
+          </div>
         ) : (
           <ConnectWalletButton size="sm" className="min-h-9 px-3 py-2 text-xs" />
         )}
         {clipboardMessage ? <span className="text-xs text-primary">{clipboardMessage}</span> : null}
       </div>
     </div>
+  );
+}
+
+function TelegramLinkPanel({
+  walletConnected,
+  linkCode,
+  generating,
+  error,
+  onGenerate,
+  onCopy
+}: {
+  walletConnected: boolean;
+  linkCode: TelegramLinkCodePayload | null;
+  generating: boolean;
+  error: string | null;
+  onGenerate: () => void;
+  onCopy: (value: string, label: string) => Promise<void>;
+}) {
+  return (
+    <Panel className="overflow-hidden">
+      <div className="flex items-center justify-between gap-3 border-b border-[rgba(96,118,168,0.14)] px-4 py-3">
+        <SectionTitle title="Link Telegram Agent" detail="Generate one-time link command" />
+        <Button size="sm" variant="outline" onClick={onGenerate} disabled={!walletConnected || generating}>
+          {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          {generating ? "Generating..." : "Generate link code"}
+        </Button>
+      </div>
+      <div className="space-y-3 px-4 py-3">
+        {!walletConnected ? (
+          <p className="text-sm text-muted-foreground">Connect wallet to link Telegram.</p>
+        ) : linkCode ? (
+          <div className="space-y-2">
+            <div className="rounded-lg border border-[rgba(96,118,168,0.14)] bg-[rgba(5,10,20,0.34)] p-3">
+              <p className="font-mono text-sm text-foreground">{linkCode.command}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Expires: {formatExpiryDisplay(linkCode.expiresAt)}</p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => void onCopy(linkCode.command, "Telegram link command")}>
+              <Copy className="h-4 w-4" />
+              Copy command
+            </Button>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Generate a code and send the command to Telegram bot: `/link &lt;code&gt;`.</p>
+        )}
+        {error ? <InlineNotice tone="error" message={error} /> : null}
+      </div>
+    </Panel>
   );
 }
 
