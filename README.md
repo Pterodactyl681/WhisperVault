@@ -644,6 +644,8 @@ Anchor-aware mode exists as a foundation, but live Anchor BudgetVault policy exe
 
 WhisperVault can be deployed to Vercel as a devnet showcase/control plane.
 
+For Linux Mirage execution, deploy the agent worker separately on Railway with `Dockerfile.worker`. See [docs/railway-worker.md](docs/railway-worker.md).
+
 Recommended Vercel environment variable:
 
 ```txt
