@@ -253,6 +253,94 @@ test("worker dry-run does not confirm pending spends", async () => {
   assert.equal(confirmCalls, 0);
 });
 
+test("worker supports raw pending-execution array response", async () => {
+  const { paylinkService } = await seedPendingAgentSpend();
+  const pending = await listPendingAgentSpendExecutions({ paylinkService });
+
+  const result = await runAgentWorkerOnce({
+    config: {
+      baseUrl: "http://localhost/",
+      agentWalletName: "agent-treasury",
+      dryRun: true,
+      executionEnabled: false
+    },
+    fetch: async (input) => {
+      assert.equal(String(input), "http://localhost/api/agent-spend/pending-execution");
+      return Response.json(pending);
+    },
+    logger: {
+      log() {},
+      error() {}
+    }
+  });
+
+  assert.equal(result.fetched, 1);
+  assert.equal(result.planned, 1);
+});
+
+test("worker pending fetch failure includes endpoint and cause", async () => {
+  await assert.rejects(
+    () =>
+      runAgentWorkerOnce({
+        config: {
+          baseUrl: "https://example.com/",
+          workerSecret: "worker-secret",
+          agentWalletName: "agent-treasury",
+          dryRun: true,
+          executionEnabled: false
+        },
+        fetch: async () => {
+          const error = new TypeError("fetch failed") as TypeError & { cause?: Error };
+          error.cause = new Error("connect ETIMEDOUT 203.0.113.10:443");
+          throw error;
+        },
+        logger: {
+          log() {},
+          error() {}
+        }
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /https:\/\/example\.com\/api\/agent-spend\/pending-execution/);
+      assert.match(error.message, /fetch failed/);
+      assert.match(error.message, /connect ETIMEDOUT/);
+      assert.doesNotMatch(error.message, /worker-secret/);
+      return true;
+    }
+  );
+});
+
+test("worker pending non-2xx failure includes status and body", async () => {
+  await assert.rejects(
+    () =>
+      runAgentWorkerOnce({
+        config: {
+          baseUrl: "https://example.com",
+          workerSecret: "worker-secret",
+          agentWalletName: "agent-treasury",
+          dryRun: true,
+          executionEnabled: false
+        },
+        fetch: async () =>
+          new Response(JSON.stringify({ error: "worker_unauthorized" }), {
+            status: 401,
+            statusText: "Unauthorized"
+          }),
+        logger: {
+          log() {},
+          error() {}
+        }
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /HTTP 401 Unauthorized/);
+      assert.match(error.message, /worker_unauthorized/);
+      assert.doesNotMatch(error.message, /worker-secret/);
+      return true;
+    }
+  );
+});
+
 test("worker dry-run does not send Telegram notification", async () => {
   const { paylinkService } = await seedPendingAgentSpend({
     telegram: {

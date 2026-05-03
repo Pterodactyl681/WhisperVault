@@ -38,12 +38,14 @@ interface RunAgentWorkerOnceOptions {
   logger?: WorkerLogger;
 }
 
-interface PendingExecutionResponse {
+interface PendingExecutionBody {
   pending?: PendingAgentSpendExecution[];
 }
 
 const DEFAULT_BASE_URL = "http://localhost:3000";
 const DEFAULT_AGENT_WALLET_NAME = "agent-treasury";
+const PENDING_EXECUTION_PATH = "/api/agent-spend/pending-execution";
+const CONFIRM_MANUAL_PATH = "/api/agent-spend/confirm-manual";
 
 export const parseAgentWorkerConfig = (
   env: NodeJS.ProcessEnv = process.env,
@@ -80,22 +82,80 @@ const buildHeaders = (workerSecret?: string | null): Headers => {
   return headers;
 };
 
+const buildControlPlaneUrl = (baseUrl: string, path: string): string => `${baseUrl.replace(/\/+$/, "")}${path}`;
+
+const readResponseBody = async (response: Response): Promise<string> => {
+  try {
+    return await response.text();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return `(failed to read response body: ${message})`;
+  }
+};
+
+const formatErrorCause = (error: unknown): string | null => {
+  if (!(error instanceof Error)) {
+    return error === undefined || error === null ? null : String(error);
+  }
+
+  const cause = (error as Error & { cause?: unknown }).cause;
+
+  if (!cause) {
+    return null;
+  }
+
+  const maybeAggregate = cause as { errors?: unknown[]; message?: string };
+
+  if (Array.isArray(maybeAggregate.errors)) {
+    const messages = maybeAggregate.errors
+      .map((nested: unknown) => (nested instanceof Error ? nested.message : String(nested)))
+      .filter(Boolean);
+    return messages.length > 0 ? messages.join("; ") : maybeAggregate.message ?? null;
+  }
+
+  return cause instanceof Error ? cause.message : String(cause);
+};
+
+const parsePendingExecutionPayload = (payload: unknown): PendingAgentSpendExecution[] => {
+  if (Array.isArray(payload)) {
+    return payload as PendingAgentSpendExecution[];
+  }
+
+  const body = payload as PendingExecutionBody | null;
+  return Array.isArray(body?.pending) ? body.pending : [];
+};
+
 const fetchPendingExecutions = async (
   baseUrl: string,
   workerSecret: string | null | undefined,
-  fetchFn: WorkerFetch
+  fetchFn: WorkerFetch,
+  logger: WorkerLogger
 ): Promise<PendingAgentSpendExecution[]> => {
-  const response = await fetchFn(`${baseUrl}/api/agent-spend/pending-execution`, {
-    method: "GET",
-    headers: buildHeaders(workerSecret)
-  });
+  const endpoint = buildControlPlaneUrl(baseUrl, PENDING_EXECUTION_PATH);
+  logger.log(`Pending execution endpoint: ${endpoint}`);
 
-  if (!response.ok) {
-    throw new Error(`Pending execution request failed with ${response.status} ${response.statusText}.`);
+  let response: Response;
+
+  try {
+    response = await fetchFn(endpoint, {
+      method: "GET",
+      headers: buildHeaders(workerSecret)
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const cause = formatErrorCause(error);
+    throw new Error(`Pending execution fetch failed for ${endpoint}: ${message}${cause ? ` (cause: ${cause})` : ""}`);
   }
 
-  const payload = (await response.json()) as PendingExecutionResponse;
-  return Array.isArray(payload.pending) ? payload.pending : [];
+  if (!response.ok) {
+    const responseBody = await readResponseBody(response);
+    throw new Error(
+      `Pending execution request failed for ${endpoint}: HTTP ${response.status} ${response.statusText}. Body: ${responseBody}`
+    );
+  }
+
+  const payload = (await response.json()) as unknown;
+  return parsePendingExecutionPayload(payload);
 };
 
 const confirmExecution = async (
@@ -105,7 +165,7 @@ const confirmExecution = async (
   txSignature: string,
   fetchFn: WorkerFetch
 ): Promise<void> => {
-  const response = await fetchFn(`${baseUrl}/api/agent-spend/confirm-manual`, {
+  const response = await fetchFn(buildControlPlaneUrl(baseUrl, CONFIRM_MANUAL_PATH), {
     method: "POST",
     headers: buildHeaders(workerSecret),
     body: JSON.stringify({
@@ -187,7 +247,7 @@ export const runAgentWorkerOnce = async (
 ): Promise<AgentWorkerRunResult> => {
   const fetchFn = options.fetch ?? fetch;
   const logger = options.logger ?? console;
-  const pending = await fetchPendingExecutions(options.config.baseUrl, options.config.workerSecret, fetchFn);
+  const pending = await fetchPendingExecutions(options.config.baseUrl, options.config.workerSecret, fetchFn, logger);
   const result: AgentWorkerRunResult = {
     fetched: pending.length,
     planned: 0,
@@ -202,6 +262,9 @@ export const runAgentWorkerOnce = async (
         agentWalletName: options.config.agentWalletName
       });
       result.planned += 1;
+      logger.log(
+        `Planned spend ${spend.paylinkId}: amount=${spend.amount} mint=${spend.mint} agentId=${spend.agentId}`
+      );
       logger.log(`Pending spend ${spend.paylinkId}: mirage ${argv.join(" ")}`);
 
       if (options.config.dryRun) {
