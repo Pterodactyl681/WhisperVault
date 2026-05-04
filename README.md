@@ -340,6 +340,7 @@ WHISPERVAULT_BASE_URL=http://localhost:3000
 WHISPERVAULT_WORKER_SECRET=<shared-worker-secret>
 AGENT_WALLET_NAME=agent-treasury
 MIRAGE_EXECUTION_ENABLED=false
+WORKER_POLL_INTERVAL_MS=30000
 ```
 
 Database-backed or Vercel-hosted control plane:
@@ -355,6 +356,7 @@ WHISPERVAULT_BASE_URL=https://<your-app>.vercel.app
 WHISPERVAULT_WORKER_SECRET=<shared-worker-secret>
 AGENT_WALLET_NAME=agent-treasury
 MIRAGE_EXECUTION_ENABLED=false
+WORKER_POLL_INTERVAL_MS=30000
 ```
 
 Quick operator check:
@@ -464,6 +466,7 @@ $env:WHISPERVAULT_BASE_URL="http://localhost:3000"
 $env:WHISPERVAULT_WORKER_SECRET="<shared-worker-secret>"
 $env:AGENT_WALLET_NAME="agent-treasury"
 $env:MIRAGE_EXECUTION_ENABLED="false"
+$env:WORKER_POLL_INTERVAL_MS="30000"
 npm.cmd run agent:worker:dry-run
 ```
 
@@ -485,6 +488,18 @@ $env:AGENT_WALLET_NAME="agent-treasury"
 $env:MIRAGE_EXECUTION_ENABLED="true"
 $env:TELEGRAM_BOT_TOKEN="<botfather-token>"
 npm.cmd run agent:worker
+```
+
+Long-running Railway worker:
+
+```powershell
+$env:WHISPERVAULT_BASE_URL="https://<your-app>.vercel.app"
+$env:WHISPERVAULT_WORKER_SECRET="<shared-worker-secret>"
+$env:TELEGRAM_BOT_TOKEN="<botfather-token>"
+$env:AGENT_WALLET_NAME="agent-treasury"
+$env:MIRAGE_EXECUTION_ENABLED="false"
+$env:WORKER_POLL_INTERVAL_MS="30000"
+npm.cmd run agent:worker:daemon
 ```
 
 Expected worker behavior:
@@ -571,10 +586,11 @@ $env:WHISPERVAULT_WORKER_SECRET="<shared-worker-secret>"
 $env:AGENT_WALLET_NAME="agent-treasury"
 $env:TELEGRAM_BOT_TOKEN="<botfather-token>"
 $env:MIRAGE_EXECUTION_ENABLED="false"
+$env:WORKER_POLL_INTERVAL_MS="30000"
 npm.cmd run agent:worker:dry-run
 
 $env:MIRAGE_EXECUTION_ENABLED="true"
-npm.cmd run agent:worker
+npm.cmd run agent:worker:daemon
 ```
 
 ---

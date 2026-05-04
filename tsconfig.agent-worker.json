@@ -22,7 +22,8 @@
     "lib/solana-validation.ts",
     "lib/whisperpay-server/**/*.ts",
     "types/**/*.ts",
-    "scripts/agent-worker.ts"
+    "scripts/agent-worker.ts",
+    "scripts/agent-worker-daemon.ts"
   ],
   "exclude": [
     "node_modules"

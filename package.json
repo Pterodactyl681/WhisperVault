@@ -15,6 +15,7 @@
     "agent:coffee": "tsc -p tsconfig.agent-runtime.json && node --no-deprecation .agent-dist/scripts/agent-coffee.js",
     "agent:coffee:reject": "tsc -p tsconfig.agent-runtime.json && node --no-deprecation .agent-dist/scripts/agent-coffee-reject.js",
     "agent:worker": "tsc -p tsconfig.agent-worker.json && node .agent-worker-dist/scripts/agent-worker.js",
+    "agent:worker:daemon": "tsc -p tsconfig.agent-worker.json && node .agent-worker-dist/scripts/agent-worker-daemon.js",
     "agent:worker:check": "node scripts/agent-worker-check.js",
     "agent:worker:dry-run": "tsc -p tsconfig.agent-worker.json && node .agent-worker-dist/scripts/agent-worker.js --dry-run",
     "demo:agent-vault:seed": "tsc -p tsconfig.demo-agent-vault.json && node .demo-dist/scripts/demo-agent-vault-seed.js",
@@ -23,7 +24,7 @@
     "demo:windows": "scripts\\demo-whispervault-windows.cmd",
     "smoke:agent-vault": "tsc -p tsconfig.smoke-agent-vault.json && node .smoke-dist/scripts/smoke-agent-vault.js",
     "test": "npm run test:agent-budget",
-    "test:agent-budget": "tsc -p tsconfig.agent-budget-tests.json && node .test-dist/tests/agent-budget-service.test.js && node .test-dist/tests/agent-budget-policy-adapter.test.js && node .test-dist/tests/agent-budget-api.test.js && node .test-dist/tests/agent-plan-api.test.js && node .test-dist/tests/agent-payment-lifecycle.test.js && node .test-dist/tests/telegram-link-service.test.js && node .test-dist/tests/telegram-link-api.test.js && node .test-dist/tests/telegram-command-service.test.js && node .test-dist/tests/telegram-webhook.test.js && node .test-dist/tests/agent-worker.test.js && node .test-dist/tests/agent-worker-check.test.js && node .test-dist/tests/storage-adapter.test.js && node .test-dist/tests/mirage-command-generator.test.js",
+    "test:agent-budget": "tsc -p tsconfig.agent-budget-tests.json && node .test-dist/tests/agent-budget-service.test.js && node .test-dist/tests/agent-budget-policy-adapter.test.js && node .test-dist/tests/agent-budget-api.test.js && node .test-dist/tests/agent-plan-api.test.js && node .test-dist/tests/agent-payment-lifecycle.test.js && node .test-dist/tests/telegram-link-service.test.js && node .test-dist/tests/telegram-link-api.test.js && node .test-dist/tests/telegram-command-service.test.js && node .test-dist/tests/telegram-webhook.test.js && node .test-dist/tests/agent-worker.test.js && node .test-dist/tests/agent-worker-daemon.test.js && node .test-dist/tests/agent-worker-check.test.js && node .test-dist/tests/storage-adapter.test.js && node .test-dist/tests/mirage-command-generator.test.js",
     "telegram:webhook:info": "node scripts/telegram-webhook-info.js",
     "telegram:set-webhook": "node scripts/telegram-set-webhook.js",
     "telegram:delete-webhook": "node scripts/telegram-delete-webhook.js"

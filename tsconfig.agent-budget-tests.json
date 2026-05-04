@@ -36,6 +36,7 @@
     "tests/telegram-command-service.test.ts",
     "tests/telegram-webhook.test.ts",
     "tests/agent-worker.test.ts",
+    "tests/agent-worker-daemon.test.ts",
     "tests/agent-worker-check.test.ts",
     "tests/storage-adapter.test.ts",
     "tests/mirage-command-generator.test.ts"
