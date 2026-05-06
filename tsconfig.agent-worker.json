@@ -15,15 +15,17 @@
     "outDir": ".agent-worker-dist",
     "rootDir": "."
   },
+  "files": [
+    "scripts/agent-worker.ts",
+    "scripts/agent-worker-daemon.ts"
+  ],
   "include": [
     "lib/agent-spend/**/*.ts",
     "lib/agent-worker/**/*.ts",
     "lib/mirage/**/*.ts",
     "lib/solana-validation.ts",
     "lib/whisperpay-server/**/*.ts",
-    "types/**/*.ts",
-    "scripts/agent-worker.ts",
-    "scripts/agent-worker-daemon.ts"
+    "types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
