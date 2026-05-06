@@ -2,6 +2,28 @@
 
 This folder contains the files needed to apply the Railway worker daemon build/path update to the repository.
 
+## Important
+
+If Railway shows:
+
+```text
+error TS6053: File '/app/scripts/agent-worker-daemon.ts' not found.
+```
+
+then `tsconfig.agent-worker.json` was copied, but this required file was not copied:
+
+```text
+scripts/agent-worker-daemon.ts
+```
+
+Do not upload only the config files. Copy this whole update folder into the repository root with paths preserved, or run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\APPLY_UPDATE.ps1
+```
+
+from inside this update folder.
+
 ## Root Cause
 
 Railway starts:
@@ -26,7 +48,7 @@ scripts/agent-worker-daemon.ts
 
 ## Required Files
 
-Copy these files into the repository root, preserving paths:
+Copy all of these files into the repository root, preserving paths:
 
 ```text
 Dockerfile.worker
@@ -44,6 +66,15 @@ tests/agent-worker.test.ts
 tests/agent-worker-daemon.test.ts
 tests/agent-worker-check.test.ts
 ```
+
+The most important required pair is:
+
+```text
+tsconfig.agent-worker.json
+scripts/agent-worker-daemon.ts
+```
+
+They must be committed together.
 
 ## Expected Compiled Path
 
