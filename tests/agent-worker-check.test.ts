@@ -26,7 +26,7 @@ type WorkerCheckModule = {
       file: string,
       args: string[],
       options: { timeout: number },
-      callback: (error: Error | null) => void
+      callback: (error: Error | null, stdout?: string, stderr?: string) => void
     ) => void;
   }) => Promise<number>;
 };
@@ -192,9 +192,7 @@ test("worker check fails when execution is enabled and Mirage is missing", async
 
 test("worker check attempts Mirage wallet address lookup when execution is enabled", async () => {
   await withWorkerEndpoint(async (baseUrl) => {
-    let checkedFile = "";
-    let checkedArgs: string[] = [];
-    let checkedTimeout = 0;
+    const calls: Array<{ file: string; args: string[]; timeout: number }> = [];
     let stdout = "";
     let stderr = "";
 
@@ -215,18 +213,22 @@ test("worker check attempts Mirage wallet address lookup when execution is enabl
         stderr += `${message}\n`;
       },
       execFile(file, args, options, callback) {
-        checkedFile = file;
-        checkedArgs = args;
-        checkedTimeout = options.timeout;
-        callback(null);
+        calls.push({ file, args, timeout: options.timeout });
+        callback(null, args.includes("--version") ? "mirage 1.2.3\n" : "");
       }
     });
     const combined = `${stdout}\n${stderr}`;
+    const versionCall = calls.find((call) => call.args.join(" ") === "--version");
+    const addressCall = calls.find((call) => call.args.join(" ") === "address --wallet agent-treasury");
 
     assert.equal(status, 0);
-    assert.match(path.basename(checkedFile), /^mirage/);
-    assert.deepEqual(checkedArgs, ["address", "--wallet", "agent-treasury"]);
-    assert.equal(checkedTimeout, 10000);
+    assert.ok(versionCall);
+    assert.match(path.basename(versionCall.file), /^mirage/);
+    assert.equal(versionCall.timeout, 10000);
+    assert.ok(addressCall);
+    assert.match(path.basename(addressCall.file), /^mirage/);
+    assert.equal(addressCall.timeout, 10000);
+    assert.match(combined, /Mirage version: mirage 1\.2\.3/);
     assert.match(combined, /Mirage wallet address lookup succeeded/);
   });
 });
@@ -252,7 +254,12 @@ test("worker check fails when real execution wallet lookup fails", async () => {
       stderr(message) {
         stderr += `${message}\n`;
       },
-      execFile(_file, _args, _options, callback) {
+      execFile(_file, args, _options, callback) {
+        if (args.includes("--version")) {
+          callback(null, "mirage 1.2.3\n");
+          return;
+        }
+
         callback(new Error("wallet missing"));
       }
     });
@@ -261,6 +268,39 @@ test("worker check fails when real execution wallet lookup fails", async () => {
     assert.notEqual(status, 0);
     assert.match(combined, /Mirage wallet address lookup failed/);
     assert.doesNotMatch(combined, /wallet missing/);
+  });
+});
+
+test("worker check warns when Mirage version is unavailable", async () => {
+  await withWorkerEndpoint(async (baseUrl) => {
+    let stdout = "";
+    let stderr = "";
+
+    const status = await runAgentWorkerCheck({
+      env: {
+        ...process.env,
+        WHISPERVAULT_BASE_URL: baseUrl,
+        WHISPERVAULT_WORKER_SECRET: "worker-secret",
+        TELEGRAM_BOT_TOKEN: "token",
+        AGENT_WALLET_NAME: "agent-treasury",
+        MIRAGE_EXECUTION_ENABLED: "false",
+        PATH: pathWithMirageExecutable()
+      },
+      stdout(message) {
+        stdout += `${message}\n`;
+      },
+      stderr(message) {
+        stderr += `${message}\n`;
+      },
+      execFile(_file, _args, _options, callback) {
+        callback(new Error("version unavailable"));
+      }
+    });
+    const combined = `${stdout}\n${stderr}`;
+
+    assert.equal(status, 0);
+    assert.match(combined, /Mirage version was not available/);
+    assert.doesNotMatch(combined, /version unavailable/);
   });
 });
 

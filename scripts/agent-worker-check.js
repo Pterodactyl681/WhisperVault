@@ -84,6 +84,26 @@ const fetchEndpoint = async (endpoint, workerSecret, env, fetchFn, log, warn) =>
   }
 };
 
+const cleanCommandOutputLine = (output) =>
+  String(output ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean)
+    ?.slice(0, 160) ?? "";
+
+const runMirageVersionCheck = (miragePath, execFileFn) =>
+  new Promise((resolve) => {
+    execFileFn(miragePath, ["--version"], { timeout: 10000 }, (error, stdout, stderr) => {
+      if (error) {
+        resolve({ ok: false });
+        return;
+      }
+
+      const version = cleanCommandOutputLine(stdout) || cleanCommandOutputLine(stderr);
+      resolve({ ok: true, version });
+    });
+  });
+
 const runMirageAddressCheck = (miragePath, agentWalletName, execFileFn) =>
   new Promise((resolve) => {
     execFileFn(miragePath, ["address", "--wallet", agentWalletName], { timeout: 10000 }, (error) => {
@@ -162,6 +182,15 @@ const runAgentWorkerCheck = async (options = {}) => {
     warn("Mirage CLI is missing from PATH; real execution is unavailable until Mirage is installed.");
   } else {
     pass(`Mirage CLI found at ${miragePath}.`);
+    const versionCheck = await runMirageVersionCheck(miragePath, execFileFn);
+
+    if (versionCheck.ok && versionCheck.version) {
+      pass(`Mirage version: ${versionCheck.version}`);
+    } else if (versionCheck.ok) {
+      warn("Mirage version command succeeded but printed no version.");
+    } else {
+      warn("Mirage version was not available from `mirage --version`.");
+    }
   }
 
   if (executionEnabled && miragePath) {

@@ -662,7 +662,7 @@ WhisperVault can be deployed to Vercel as a devnet showcase/control plane.
 
 For Linux Mirage execution, deploy the agent worker separately on Railway with `Dockerfile.worker`. See [docs/railway-worker.md](docs/railway-worker.md).
 
-### Railway real Mirage execution setup
+### Real Mirage execution on Railway
 
 Railway should deploy first with:
 
@@ -679,15 +679,17 @@ AGENT_WALLET_NAME=agent-treasury
 MIRAGE_EXECUTION_ENABLED=true
 ```
 
+Configure the `agent-treasury` wallet on the Railway/Linux worker host using the wallet setup flow supported by Mirage/OWS. Keep the wallet on the worker execution host only.
+
 Run the readiness check before starting real execution:
 
 ```powershell
 npm.cmd run agent:worker:check
 ```
 
-When execution is enabled, the check verifies `mirage` exists, checks `AGENT_WALLET_NAME`, and attempts `mirage address --wallet <AGENT_WALLET_NAME>`. It prints clear pass, warn, and fail lines and never prints secret values, wallet files, private keys, seed phrases, or Mirage command output.
+The check verifies `mirage` exists, prints the Mirage version when `mirage --version` is available, checks `AGENT_WALLET_NAME`, and checks the worker control-plane endpoint. When execution is enabled, it also attempts `mirage address --wallet <AGENT_WALLET_NAME>`. It prints clear pass, warn, and fail lines and never prints secret values, wallet files, private keys, seed phrases, or Mirage command output.
 
-Never commit wallet files, private keys, seed phrases, `.env` files, or Railway secrets. If Mirage wallet files need to survive Railway redeploys, use a Railway persistent volume mounted at the Mirage wallet configuration path, initialize or import `agent-treasury` there through a trusted operator process, then rerun `npm.cmd run agent:worker:check` with `MIRAGE_EXECUTION_ENABLED=true`.
+Never commit wallet files, private keys, seed phrases, `.env` files, or Railway secrets. Use Railway Variables or a Railway Volume only if Mirage/OWS supports that storage path safely. If Mirage wallet files need to survive Railway redeploys, use a Railway persistent volume mounted at the Mirage wallet configuration path, initialize or import `agent-treasury` there through a trusted operator process, then rerun `npm.cmd run agent:worker:check` with `MIRAGE_EXECUTION_ENABLED=true`.
 
 Recommended Vercel environment variable:
 

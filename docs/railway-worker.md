@@ -37,7 +37,7 @@ WORKER_POLL_INTERVAL_MS=30000
 
 Supabase environment variables are not needed in the worker when the worker only talks to the Vercel control-plane API.
 
-## Railway real Mirage execution setup
+## Real Mirage execution on Railway
 
 Keep Railway in dry-run mode until the worker has passed the readiness check with Mirage installed and the execution wallet available:
 
@@ -59,13 +59,17 @@ The worker host/container must have Mirage wallet configuration for the wallet n
 AGENT_WALLET_NAME=agent-treasury
 ```
 
+Configure the `agent-treasury` wallet on the Railway/Linux worker host using the wallet setup flow supported by Mirage/OWS. Keep the wallet on the worker execution host only.
+
 Before enabling real execution, run:
 
 ```txt
 npm run agent:worker:check
 ```
 
-With `MIRAGE_EXECUTION_ENABLED=true`, the check verifies that `mirage` exists on `PATH`, confirms `AGENT_WALLET_NAME` is set or warns that the default `agent-treasury` will be used, and attempts:
+The check verifies that `mirage` exists on `PATH`, prints the Mirage version when `mirage --version` is available, confirms `AGENT_WALLET_NAME` is set or warns that the default `agent-treasury` will be used, and checks the Vercel control-plane pending execution endpoint.
+
+With `MIRAGE_EXECUTION_ENABLED=true`, it also attempts:
 
 ```txt
 mirage address --wallet <AGENT_WALLET_NAME>
@@ -73,9 +77,17 @@ mirage address --wallet <AGENT_WALLET_NAME>
 
 The check prints pass, warn, and fail lines and does not print secret values, wallet files, private keys, seed phrases, or Mirage command output.
 
-Never commit wallet files, private keys, seed phrases, `.env` files, or Railway secrets to the repository. Configure wallet material through the trusted worker host or Railway secret/runtime setup supported by your Mirage workflow.
+Never commit wallet files, private keys, seed phrases, `.env` files, or Railway secrets to the repository. Configure wallet material through the trusted worker host or Railway secret/runtime setup supported by your Mirage/OWS workflow.
 
-If Mirage stores wallet files on disk in the worker container, use a Railway persistent volume as the recommended way to preserve the `agent-treasury` wallet across redeploys. Mount the volume at the path Mirage expects for wallet configuration, initialize or import the wallet there through a trusted operator process, then rerun `npm run agent:worker:check` with `MIRAGE_EXECUTION_ENABLED=true` before starting the daemon in real execution mode.
+Use Railway Variables or a Railway Volume only if Mirage/OWS supports that storage path safely. If Mirage stores wallet files on disk in the worker container, a Railway persistent volume is the recommended way to preserve the `agent-treasury` wallet across redeploys: mount the volume at the path Mirage expects for wallet configuration, initialize or import the wallet there through a trusted operator process, then rerun `npm run agent:worker:check` with `MIRAGE_EXECUTION_ENABLED=true`.
+
+Only after the check passes should you set:
+
+```txt
+MIRAGE_EXECUTION_ENABLED=true
+```
+
+Then restart the Railway daemon service so real execution runs in the worker.
 
 ## Dry-Run Mode
 
