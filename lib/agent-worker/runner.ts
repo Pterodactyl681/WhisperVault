@@ -320,6 +320,11 @@ const replaceMirageMintArg = (argv: string[], mint: string | null | undefined): 
   return nextArgv;
 };
 
+const resolveExecutionMint = (spend: PendingAgentSpendExecution, config: AgentWorkerConfig): string => {
+  const executionMint = process.env.MIRAGE_EXECUTION_MINT || config.mirageExecutionMint || spend.mint;
+  return executionMint.trim() || spend.mint;
+};
+
 const isSolanaDevnetSplFallbackEnabled = (config: AgentWorkerConfig): boolean =>
   config.executionFallbackMode?.trim() === "solana-devnet-spl";
 
@@ -342,10 +347,12 @@ export const runAgentWorkerOnce = async (
       const argv = validateMirageTransferArgv(spend.mirage.argv, {
         agentWalletName: options.config.agentWalletName
       });
-      const executionArgv = replaceMirageMintArg(argv, options.config.mirageExecutionMint);
+      const executionMint = resolveExecutionMint(spend, options.config);
+      const executionArgv = replaceMirageMintArg(argv, executionMint);
       result.planned += 1;
+      logger.log(`displayMint=${spend.mint} executionMint=${executionMint}`);
       logger.log(
-        `Planned spend ${spend.paylinkId}: amount=${spend.amount} mint=${spend.mint} agentId=${spend.agentId}`
+        `Planned spend ${spend.paylinkId}: amount=${spend.amount} displayMint=${spend.mint} executionMint=${executionMint} agentId=${spend.agentId}`
       );
       logger.log(`Pending spend ${spend.paylinkId}: mirage ${executionArgv.join(" ")}`);
 
@@ -386,7 +393,7 @@ export const runAgentWorkerOnce = async (
           throw new Error(`Mirage failed (${mirageError}) and Solana devnet SPL fallback executor is not configured.`);
         }
 
-        if (!options.config.mirageExecutionMint?.trim()) {
+        if (executionMint === spend.mint && !options.config.mirageExecutionMint?.trim() && !process.env.MIRAGE_EXECUTION_MINT) {
           throw new Error(`Mirage failed (${mirageError}) and MIRAGE_EXECUTION_MINT is required for fallback.`);
         }
 
@@ -396,7 +403,7 @@ export const runAgentWorkerOnce = async (
 
         logger.log(`Mirage failed for ${spend.paylinkId}; trying Solana devnet SPL fallback: ${mirageError}`);
         const fallback = await options.executeSolanaDevnetSpl({
-          mint: options.config.mirageExecutionMint,
+          mint: executionMint,
           recipient: spend.recipient,
           amount: spend.amount,
           secretKeyJson: options.config.solanaExecutorSecretKeyJson

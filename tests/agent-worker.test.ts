@@ -325,6 +325,7 @@ test("worker safe mode plans pending spends and exits 0", async () => {
   assert.equal(confirmCalls, 0);
   assert.equal(sentMessages.length, 0);
   assert.equal(errors.length, 0);
+  assert.ok(logs.includes("WORKER_BUILD_MARKER=fallback-mint-override-v3"));
   assert.ok(logs.some((message) => message.includes("Safe mode skip")));
   assert.ok(logs.some((message) => message.includes("Worker result: fetched=1 planned=1 executed=0 confirmed=0")));
 });
@@ -640,32 +641,50 @@ test("worker uses Mirage execution mint override while UI mint remains USDC", as
   const { paylinkService } = await seedPendingAgentSpend();
   const pending = await listPendingAgentSpendExecutions({ paylinkService });
   let mirageArgv: string[] = [];
+  const logs: string[] = [];
+  const previousMint = process.env.MIRAGE_EXECUTION_MINT;
 
-  const result = await runAgentWorkerOnce({
-    config: {
-      baseUrl: "http://localhost",
-      agentWalletName: "agent-treasury",
-      dryRun: false,
-      executionEnabled: true,
-      mirageExecutionMint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
-    },
-    fetch: await createWorkerFetch(paylinkService),
-    executeMirage: async (argv) => {
-      mirageArgv = argv;
-      return {
-        stdout: VALID_SIGNATURE,
-        stderr: ""
-      };
-    },
-    logger: {
-      log() {},
-      error() {}
+  process.env.MIRAGE_EXECUTION_MINT = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
+
+  try {
+    const result = await runAgentWorkerOnce({
+      config: {
+        baseUrl: "http://localhost",
+        agentWalletName: "agent-treasury",
+        dryRun: false,
+        executionEnabled: true
+      },
+      fetch: await createWorkerFetch(paylinkService),
+      executeMirage: async (argv) => {
+        mirageArgv = argv;
+        return {
+          stdout: VALID_SIGNATURE,
+          stderr: ""
+        };
+      },
+      logger: {
+        log(message) {
+          logs.push(message);
+        },
+        error() {}
+      }
+    });
+
+    assert.equal(result.confirmed, 1);
+    assert.equal(pending[0]?.mint, "USDC");
+    assert.equal(mirageArgv[mirageArgv.indexOf("--mint") + 1], "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
+    assert.ok(logs.includes("displayMint=USDC executionMint=4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"));
+    const commandLog = logs.find((message) => message.includes("Pending spend") && message.includes("mirage transfer"));
+    assert.ok(commandLog);
+    assert.match(commandLog, /--mint 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU/);
+    assert.doesNotMatch(commandLog, /--mint USDC/);
+  } finally {
+    if (previousMint === undefined) {
+      delete process.env.MIRAGE_EXECUTION_MINT;
+    } else {
+      process.env.MIRAGE_EXECUTION_MINT = previousMint;
     }
-  });
-
-  assert.equal(result.confirmed, 1);
-  assert.equal(pending[0]?.mint, "USDC");
-  assert.equal(mirageArgv[mirageArgv.indexOf("--mint") + 1], "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
+  }
 });
 
 test("worker Mirage failure triggers Solana devnet SPL fallback", async () => {
