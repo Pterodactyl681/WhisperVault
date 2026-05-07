@@ -37,6 +37,7 @@
   ],
   "exclude": [
     "node_modules",
+    "railway-agent-worker-daemon-update-20260506",
     "виспердеплою",
     "новый версиЯ"
   ]

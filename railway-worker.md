@@ -29,7 +29,7 @@ WHISPERVAULT_BASE_URL=https://whisper-vault-sigma.vercel.app
 WHISPERVAULT_WORKER_SECRET=<same as Vercel>
 TELEGRAM_BOT_TOKEN=<BotFather token>
 AGENT_WALLET_NAME=agent-treasury
-MIRAGE_EXECUTION_ENABLED=true
+MIRAGE_EXECUTION_ENABLED=false
 WORKER_POLL_INTERVAL_MS=30000
 ```
 
@@ -37,15 +37,45 @@ WORKER_POLL_INTERVAL_MS=30000
 
 Supabase environment variables are not needed in the worker when the worker only talks to the Vercel control-plane API.
 
-## Wallet Setup
+## Railway real Mirage execution setup
 
-The worker host/container must have Mirage/OWS wallet configuration for:
+Keep Railway in dry-run mode until the worker has passed the readiness check with Mirage installed and the execution wallet available:
 
 ```txt
-agent-treasury
+MIRAGE_EXECUTION_ENABLED=false
 ```
 
-Do not commit wallet files, private keys, seed phrases, or Railway secrets to the repository. Configure wallet material through the trusted worker host or Railway secret/runtime setup supported by your Mirage/OWS workflow.
+Dry-run mode lets the daemon deploy, reach Vercel, fetch pending spends, and validate planned Mirage commands without executing transfers, confirming receipts, or sending execution-confirmed Telegram pushes.
+
+Switch to real execution only after the worker host has Mirage and the `agent-treasury` wallet configured:
+
+```txt
+MIRAGE_EXECUTION_ENABLED=true
+```
+
+The worker host/container must have Mirage wallet configuration for the wallet named by:
+
+```txt
+AGENT_WALLET_NAME=agent-treasury
+```
+
+Before enabling real execution, run:
+
+```txt
+npm run agent:worker:check
+```
+
+With `MIRAGE_EXECUTION_ENABLED=true`, the check verifies that `mirage` exists on `PATH`, confirms `AGENT_WALLET_NAME` is set or warns that the default `agent-treasury` will be used, and attempts:
+
+```txt
+mirage address --wallet <AGENT_WALLET_NAME>
+```
+
+The check prints pass, warn, and fail lines and does not print secret values, wallet files, private keys, seed phrases, or Mirage command output.
+
+Never commit wallet files, private keys, seed phrases, `.env` files, or Railway secrets to the repository. Configure wallet material through the trusted worker host or Railway secret/runtime setup supported by your Mirage workflow.
+
+If Mirage stores wallet files on disk in the worker container, use a Railway persistent volume as the recommended way to preserve the `agent-treasury` wallet across redeploys. Mount the volume at the path Mirage expects for wallet configuration, initialize or import the wallet there through a trusted operator process, then rerun `npm run agent:worker:check` with `MIRAGE_EXECUTION_ENABLED=true` before starting the daemon in real execution mode.
 
 ## Dry-Run Mode
 
@@ -70,7 +100,7 @@ npm run agent:worker:check
 npm run agent:worker:daemon
 ```
 
-`npm run agent:worker:check` prints readiness status, the control-plane endpoint, Node version, Mirage executable path, and Telegram readiness without printing secret values. It fails for missing `WHISPERVAULT_BASE_URL`, missing `WHISPERVAULT_WORKER_SECRET`, or `MIRAGE_EXECUTION_ENABLED=true` with no `mirage` executable on `PATH`.
+`npm run agent:worker:check` prints readiness status, the control-plane endpoint, Node version, Mirage executable path, Telegram readiness, and Mirage wallet-address lookup readiness without printing secret values or Mirage command output. It fails for missing `WHISPERVAULT_BASE_URL`, missing `WHISPERVAULT_WORKER_SECRET`, `MIRAGE_EXECUTION_ENABLED=true` with no `mirage` executable on `PATH`, or `MIRAGE_EXECUTION_ENABLED=true` when `mirage address --wallet <AGENT_WALLET_NAME>` cannot resolve the worker wallet.
 
 ## Worker Logs
 
