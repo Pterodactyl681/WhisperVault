@@ -12,4 +12,4 @@ COPY . .
 
 RUN npx tsc -p tsconfig.agent-worker.json
 
-CMD ["npm", "run", "agent:worker:daemon"]
+CMD ["node", ".agent-worker-dist/scripts/agent-worker-daemon.js"]

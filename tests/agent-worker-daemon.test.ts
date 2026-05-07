@@ -287,9 +287,45 @@ test("daemon shuts down cleanly on SIGINT and SIGTERM", async () => {
     await daemon;
 
     assert.equal(runCount, 1);
-    assert.ok(logs.some((message) => message.includes("Shutdown signal received.")));
+    assert.ok(logs.includes("Worker daemon shutting down..."));
     assert.ok(logs.some((message) => message.includes("daemon stopped.")));
   }
+});
+
+test("daemon waits for current iteration after SIGTERM and exits cleanly", async () => {
+  const signalHost = createFakeSignalHost();
+  let finishIteration = (): void => {};
+  let runCount = 0;
+  const logs: string[] = [];
+  const daemon = runAgentWorkerDaemon({
+    logger: {
+      error() {},
+      log(message) {
+        logs.push(message);
+      }
+    },
+    pollIntervalMs: 25,
+    runOnce: async () => {
+      runCount += 1;
+      signalHost.emit("SIGTERM");
+      await new Promise<void>((resolve) => {
+        finishIteration = resolve;
+      });
+      return 0;
+    },
+    signalHost,
+    sleep: createFakeSleepController().sleep
+  });
+
+  await flush();
+  assert.equal(runCount, 1);
+  assert.ok(logs.includes("Worker daemon shutting down..."));
+
+  finishIteration();
+  await daemon;
+
+  assert.equal(runCount, 1);
+  assert.ok(logs.includes("WhisperVault Agent Worker daemon stopped."));
 });
 
 test("parseWorkerPollIntervalMs defaults to 30000", async () => {

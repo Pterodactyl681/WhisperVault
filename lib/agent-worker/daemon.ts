@@ -89,7 +89,7 @@ export const runAgentWorkerDaemon = async (options: RunAgentWorkerDaemonOptions)
     }
 
     shouldStop = true;
-    logger.log("Shutdown signal received. WhisperVault Agent Worker daemon will stop after the current cycle.");
+    logger.log("Worker daemon shutting down...");
     currentSleep?.cancel();
   };
 
