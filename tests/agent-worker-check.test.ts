@@ -331,6 +331,32 @@ test("worker check warns when Mirage version is unavailable", async () => {
   });
 });
 
+test("worker check validates MIRAGE_EXECUTION_MINT when set", async () => {
+  await withWorkerEndpoint(async (baseUrl) => {
+    const valid = await runCheckWithOptions({
+      WHISPERVAULT_BASE_URL: baseUrl,
+      WHISPERVAULT_WORKER_SECRET: "worker-secret",
+      TELEGRAM_BOT_TOKEN: "token",
+      MIRAGE_EXECUTION_ENABLED: "false",
+      MIRAGE_EXECUTION_MINT: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+      PATH: emptyPath()
+    });
+    const invalid = await runCheckWithOptions({
+      WHISPERVAULT_BASE_URL: baseUrl,
+      WHISPERVAULT_WORKER_SECRET: "worker-secret",
+      TELEGRAM_BOT_TOKEN: "token",
+      MIRAGE_EXECUTION_ENABLED: "false",
+      MIRAGE_EXECUTION_MINT: "USDC",
+      PATH: emptyPath()
+    });
+
+    assert.equal(valid.status, 0);
+    assert.match(`${valid.stdout}\n${valid.stderr}`, /MIRAGE_EXECUTION_MINT is a valid Solana public key/);
+    assert.notEqual(invalid.status, 0);
+    assert.match(`${invalid.stdout}\n${invalid.stderr}`, /MIRAGE_EXECUTION_MINT must be a valid Solana public key/);
+  });
+});
+
 test("worker check validates Solana devnet SPL fallback keypair and SOL", async () => {
   await withWorkerEndpoint(async (baseUrl) => {
     const keypair = Keypair.generate();

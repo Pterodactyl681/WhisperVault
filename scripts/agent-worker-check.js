@@ -137,6 +137,23 @@ const runMirageAddressCheck = (miragePath, agentWalletName, execFileFn) =>
     });
   });
 
+const validateMirageExecutionMintIfSet = (env, pass, fail) => {
+  const mintValue = readEnv(env, "MIRAGE_EXECUTION_MINT");
+
+  if (!mintValue) {
+    return 0;
+  }
+
+  try {
+    new PublicKey(mintValue);
+    pass("MIRAGE_EXECUTION_MINT is a valid Solana public key.");
+    return 0;
+  } catch {
+    fail("MIRAGE_EXECUTION_MINT must be a valid Solana public key.");
+    return 1;
+  }
+};
+
 const runSolanaFallbackCheck = async (env, connectionFactory, pass, warn, fail) => {
   const fallbackMode = readEnv(env, "EXECUTION_FALLBACK_MODE");
 
@@ -175,7 +192,6 @@ const runSolanaFallbackCheck = async (env, connectionFactory, pass, warn, fail) 
 
   try {
     mint = new PublicKey(mintValue);
-    pass("MIRAGE_EXECUTION_MINT is a valid Solana public key.");
   } catch {
     fail("MIRAGE_EXECUTION_MINT must be a valid Solana public key.");
     return 1;
@@ -309,6 +325,11 @@ const runAgentWorkerCheck = async (options = {}) => {
     const endpoint = buildPendingEndpoint(baseUrl);
     log(`Pending execution endpoint: ${endpoint}`);
     await fetchEndpoint(endpoint, workerSecret, env, fetchFn, log, warn);
+  }
+
+  const mintExitCode = validateMirageExecutionMintIfSet(env, pass, fail);
+  if (mintExitCode !== 0) {
+    exitCode = mintExitCode;
   }
 
   const fallbackExitCode = await runSolanaFallbackCheck(env, options.solanaConnectionFactory, pass, warn, fail);
