@@ -11,6 +11,9 @@ export interface AgentWorkerConfig {
   dryRun: boolean;
   executionEnabled: boolean;
   telegramBotToken?: string | null;
+  mirageExecutionMint?: string | null;
+  executionFallbackMode?: string | null;
+  solanaExecutorSecretKeyJson?: string | null;
 }
 
 export interface AgentWorkerRunResult {
@@ -26,14 +29,29 @@ export interface MirageExecutionResult {
   stderr: string;
 }
 
+export interface SolanaDevnetSplTransferInput {
+  mint: string;
+  recipient: string;
+  amount: string;
+  secretKeyJson: string;
+}
+
+export interface SolanaDevnetSplTransferResult {
+  txSignature: string;
+}
+
 export type WorkerFetch = typeof fetch;
 export type MirageExecutor = (argv: string[]) => Promise<MirageExecutionResult>;
+export type SolanaDevnetSplExecutor = (
+  input: SolanaDevnetSplTransferInput
+) => Promise<SolanaDevnetSplTransferResult>;
 export type WorkerLogger = Pick<Console, "log" | "error"> & Partial<Pick<Console, "warn">>;
 
 interface RunAgentWorkerOnceOptions {
   config: AgentWorkerConfig;
   fetch?: WorkerFetch;
   executeMirage?: MirageExecutor;
+  executeSolanaDevnetSpl?: SolanaDevnetSplExecutor;
   telegramClient?: TelegramBotClient;
   logger?: WorkerLogger;
 }
@@ -73,7 +91,10 @@ export const parseAgentWorkerConfig = (
     agentWalletName: env.AGENT_WALLET_NAME?.trim() || DEFAULT_AGENT_WALLET_NAME,
     dryRun,
     executionEnabled,
-    telegramBotToken: env.TELEGRAM_BOT_TOKEN?.trim() || null
+    telegramBotToken: env.TELEGRAM_BOT_TOKEN?.trim() || null,
+    mirageExecutionMint: env.MIRAGE_EXECUTION_MINT?.trim() || null,
+    executionFallbackMode: env.EXECUTION_FALLBACK_MODE?.trim() || null,
+    solanaExecutorSecretKeyJson: env.SOLANA_EXECUTOR_SECRET_KEY_JSON?.trim() || null
   };
 };
 
@@ -175,7 +196,13 @@ const confirmExecution = async (
   workerSecret: string | null | undefined,
   spend: PendingAgentSpendExecution,
   txSignature: string,
-  fetchFn: WorkerFetch
+  fetchFn: WorkerFetch,
+  metadata?: {
+    executor?: string;
+    executionRail?: string;
+    mirageAttempted?: boolean;
+    mirageError?: string | null;
+  }
 ): Promise<void> => {
   const response = await fetchFn(buildControlPlaneUrl(baseUrl, CONFIRM_MANUAL_PATH), {
     method: "POST",
@@ -183,7 +210,10 @@ const confirmExecution = async (
     body: JSON.stringify({
       paylinkId: spend.paylinkId,
       txSignature,
-      executor: "mirage-cli"
+      executor: metadata?.executor ?? "mirage-cli",
+      ...(metadata?.executionRail ? { executionRail: metadata.executionRail } : {}),
+      ...(metadata?.mirageAttempted !== undefined ? { mirageAttempted: metadata.mirageAttempted } : {}),
+      ...(metadata?.mirageError ? { mirageError: metadata.mirageError } : {})
     })
   });
 
@@ -208,22 +238,40 @@ const formatMintLabel = (mint: string): string => {
 
 const buildTelegramConfirmationMessage = (
   spend: PendingAgentSpendExecution,
-  txSignature: string
-): string =>
-  [
+  txSignature: string,
+  metadata?: {
+    executionRail?: string;
+    mirageAttempted?: boolean;
+  }
+): string => {
+  if (metadata?.executionRail === "solana-devnet-spl-fallback") {
+    return [
+      "Execution confirmed",
+      "Rail: Solana devnet SPL fallback",
+      `Mirage command: ${metadata.mirageAttempted ? "attempted" : "not attempted"}`,
+      `Tx: ${txSignature}`
+    ].join("\n");
+  }
+
+  return [
     "Execution confirmed",
     `Agent: ${spend.agentId}`,
     `Amount: ${spend.amount} ${formatMintLabel(spend.mint)}`,
     `Devnet tx: ${txSignature}`,
     "Receipt: confirmed"
   ].join("\n");
+};
 
 const notifyTelegramConfirmation = async (
   spend: PendingAgentSpendExecution,
   txSignature: string,
   config: AgentWorkerConfig,
   logger: WorkerLogger,
-  telegramClient?: TelegramBotClient
+  telegramClient?: TelegramBotClient,
+  metadata?: {
+    executionRail?: string;
+    mirageAttempted?: boolean;
+  }
 ): Promise<void> => {
   const chatId = spend.telegram?.telegramChatId?.trim();
 
@@ -244,7 +292,7 @@ const notifyTelegramConfirmation = async (
     });
 
   try {
-    await client.sendMessage(chatId, buildTelegramConfirmationMessage(spend, txSignature), {
+    await client.sendMessage(chatId, buildTelegramConfirmationMessage(spend, txSignature, metadata), {
       disableWebPagePreview: true
     });
     logger.log("Telegram notification: sent");
@@ -253,6 +301,27 @@ const notifyTelegramConfirmation = async (
     warn(logger, `Telegram notification: failed (${reason})`);
   }
 };
+
+const replaceMirageMintArg = (argv: string[], mint: string | null | undefined): string[] => {
+  const executionMint = mint?.trim();
+
+  if (!executionMint) {
+    return [...argv];
+  }
+
+  const nextArgv = [...argv];
+  const mintIndex = nextArgv.indexOf("--mint");
+
+  if (mintIndex < 0 || mintIndex + 1 >= nextArgv.length) {
+    return nextArgv;
+  }
+
+  nextArgv[mintIndex + 1] = executionMint;
+  return nextArgv;
+};
+
+const isSolanaDevnetSplFallbackEnabled = (config: AgentWorkerConfig): boolean =>
+  config.executionFallbackMode?.trim() === "solana-devnet-spl";
 
 export const runAgentWorkerOnce = async (
   options: RunAgentWorkerOnceOptions
@@ -273,11 +342,12 @@ export const runAgentWorkerOnce = async (
       const argv = validateMirageTransferArgv(spend.mirage.argv, {
         agentWalletName: options.config.agentWalletName
       });
+      const executionArgv = replaceMirageMintArg(argv, options.config.mirageExecutionMint);
       result.planned += 1;
       logger.log(
         `Planned spend ${spend.paylinkId}: amount=${spend.amount} mint=${spend.mint} agentId=${spend.agentId}`
       );
-      logger.log(`Pending spend ${spend.paylinkId}: mirage ${argv.join(" ")}`);
+      logger.log(`Pending spend ${spend.paylinkId}: mirage ${executionArgv.join(" ")}`);
 
       if (options.config.dryRun) {
         continue;
@@ -292,20 +362,67 @@ export const runAgentWorkerOnce = async (
         throw new Error("Mirage executor is not configured.");
       }
 
-      const execution = await options.executeMirage(argv);
-      result.executed += 1;
-      const txSignature = extractSolanaTxSignature(`${execution.stdout}\n${execution.stderr}`);
+      let txSignature: string | null = null;
+      let mirageError: string | null = null;
 
-      if (!txSignature) {
-        logger.log(execution.stdout);
-        logger.error(execution.stderr);
-        throw new Error("Could not parse a Solana tx signature from Mirage output. Confirm manually in the UI.");
+      try {
+        const execution = await options.executeMirage(executionArgv);
+        result.executed += 1;
+        txSignature = extractSolanaTxSignature(`${execution.stdout}\n${execution.stderr}`);
+
+        if (!txSignature) {
+          logger.log(execution.stdout);
+          logger.error(execution.stderr);
+          throw new Error("Could not parse a Solana tx signature from Mirage output. Confirm manually in the UI.");
+        }
+      } catch (error) {
+        mirageError = error instanceof Error ? error.message : String(error);
+
+        if (!isSolanaDevnetSplFallbackEnabled(options.config)) {
+          throw error;
+        }
+
+        if (!options.executeSolanaDevnetSpl) {
+          throw new Error(`Mirage failed (${mirageError}) and Solana devnet SPL fallback executor is not configured.`);
+        }
+
+        if (!options.config.mirageExecutionMint?.trim()) {
+          throw new Error(`Mirage failed (${mirageError}) and MIRAGE_EXECUTION_MINT is required for fallback.`);
+        }
+
+        if (!options.config.solanaExecutorSecretKeyJson?.trim()) {
+          throw new Error(`Mirage failed (${mirageError}) and SOLANA_EXECUTOR_SECRET_KEY_JSON is required for fallback.`);
+        }
+
+        logger.log(`Mirage failed for ${spend.paylinkId}; trying Solana devnet SPL fallback: ${mirageError}`);
+        const fallback = await options.executeSolanaDevnetSpl({
+          mint: options.config.mirageExecutionMint,
+          recipient: spend.recipient,
+          amount: spend.amount,
+          secretKeyJson: options.config.solanaExecutorSecretKeyJson
+        });
+        txSignature = fallback.txSignature;
+        result.executed += 1;
       }
 
-      await confirmExecution(options.config.baseUrl, options.config.workerSecret, spend, txSignature, fetchFn);
+      if (!txSignature) {
+        throw new Error("Execution did not return a Solana tx signature.");
+      }
+
+      const fallbackMetadata =
+        mirageError && isSolanaDevnetSplFallbackEnabled(options.config)
+          ? {
+              executor: "solana-devnet-spl-fallback",
+              executionRail: "solana-devnet-spl-fallback",
+              mirageAttempted: true,
+              mirageError
+            }
+          : undefined;
+
+      await confirmExecution(options.config.baseUrl, options.config.workerSecret, spend, txSignature, fetchFn, fallbackMetadata);
       result.confirmed += 1;
       logger.log(`Confirmed ${spend.paylinkId} with tx ${txSignature}`);
-      await notifyTelegramConfirmation(spend, txSignature, options.config, logger, options.telegramClient);
+      await notifyTelegramConfirmation(spend, txSignature, options.config, logger, options.telegramClient, fallbackMetadata);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       result.errors.push(`${spend.paylinkId}: ${message}`);

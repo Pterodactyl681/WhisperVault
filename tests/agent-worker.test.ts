@@ -124,11 +124,17 @@ const createWorkerFetch = async (paylinkService: WhisperPayServerService): Promi
         paylinkId?: string;
         txSignature?: string;
         executor?: string;
+        executionRail?: string;
+        mirageAttempted?: boolean;
+        mirageError?: string;
       };
       await paylinkService.confirmManualAgentSpend({
         paylinkId: body.paylinkId ?? "",
         txSignature: body.txSignature ?? "",
-        executor: body.executor ?? ""
+        executor: body.executor ?? "",
+        ...(body.executionRail ? { executionRail: body.executionRail } : {}),
+        ...(body.mirageAttempted !== undefined ? { mirageAttempted: body.mirageAttempted } : {}),
+        ...(body.mirageError ? { mirageError: body.mirageError } : {})
       });
       return Response.json({});
     }
@@ -630,6 +636,161 @@ test("worker Mirage failure does not confirm receipt", async () => {
   assert.ok(errors.some((message) => message.includes("Skipped")));
 });
 
+test("worker uses Mirage execution mint override while UI mint remains USDC", async () => {
+  const { paylinkService } = await seedPendingAgentSpend();
+  const pending = await listPendingAgentSpendExecutions({ paylinkService });
+  let mirageArgv: string[] = [];
+
+  const result = await runAgentWorkerOnce({
+    config: {
+      baseUrl: "http://localhost",
+      agentWalletName: "agent-treasury",
+      dryRun: false,
+      executionEnabled: true,
+      mirageExecutionMint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
+    },
+    fetch: await createWorkerFetch(paylinkService),
+    executeMirage: async (argv) => {
+      mirageArgv = argv;
+      return {
+        stdout: VALID_SIGNATURE,
+        stderr: ""
+      };
+    },
+    logger: {
+      log() {},
+      error() {}
+    }
+  });
+
+  assert.equal(result.confirmed, 1);
+  assert.equal(pending[0]?.mint, "USDC");
+  assert.equal(mirageArgv[mirageArgv.indexOf("--mint") + 1], "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
+});
+
+test("worker Mirage failure triggers Solana devnet SPL fallback", async () => {
+  const { paylinkService, paylink } = await seedPendingAgentSpend();
+  const fallbackSignature = "6".repeat(88);
+  let fallbackCalls = 0;
+  const confirmBodies: JsonRecord[] = [];
+  const sentMessages: Array<{ chatId: string; text: string }> = [];
+
+  const result = await runAgentWorkerOnce({
+    config: {
+      baseUrl: "http://localhost",
+      agentWalletName: "agent-treasury",
+      dryRun: false,
+      executionEnabled: true,
+      telegramBotToken: "test-token",
+      mirageExecutionMint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+      executionFallbackMode: "solana-devnet-spl",
+      solanaExecutorSecretKeyJson: "[1,2,3]"
+    },
+    fetch: async (input, init) => {
+      const url = String(input);
+
+      if (url.endsWith("/api/agent-spend/pending-execution")) {
+        return Response.json({ pending: await listPendingAgentSpendExecutions({ paylinkService }) });
+      }
+
+      if (url.endsWith("/api/agent-spend/confirm-manual")) {
+        const body = JSON.parse(String(init?.body ?? "{}")) as JsonRecord;
+        confirmBodies.push(body);
+        await paylinkService.confirmManualAgentSpend({
+          paylinkId: String(body.paylinkId ?? ""),
+          txSignature: String(body.txSignature ?? ""),
+          executor: String(body.executor ?? ""),
+          executionRail: String(body.executionRail ?? ""),
+          mirageAttempted: body.mirageAttempted === true,
+          mirageError: String(body.mirageError ?? "")
+        });
+        return Response.json({});
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    },
+    executeMirage: async () => {
+      throw new Error("Invalid param WrongSize");
+    },
+    executeSolanaDevnetSpl: async (input) => {
+      fallbackCalls += 1;
+      assert.equal(input.mint, "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
+      assert.equal(input.amount, "5");
+      assert.equal(input.recipient, DEFAULT_DEMO_AGENT_RECIPIENT);
+      return { txSignature: fallbackSignature };
+    },
+    telegramClient: {
+      async sendMessage(chatId, text) {
+        sentMessages.push({ chatId, text });
+      }
+    },
+    logger: {
+      log() {},
+      error() {}
+    }
+  });
+
+  const paymentIntent = await paylinkService.getPaymentIntentByPaylinkId(paylink.id);
+  assert.equal(result.confirmed, 1);
+  assert.equal(fallbackCalls, 1);
+  assert.equal(confirmBodies[0]?.executor, "solana-devnet-spl-fallback");
+  assert.equal(confirmBodies[0]?.executionRail, "solana-devnet-spl-fallback");
+  assert.equal(confirmBodies[0]?.mirageAttempted, true);
+  assert.equal(confirmBodies[0]?.mirageError, "Invalid param WrongSize");
+  assert.equal(paymentIntent?.txSignature, fallbackSignature);
+  assert.equal(paymentIntent?.metadata?.manualExecution?.executionRail, "solana-devnet-spl-fallback");
+  assert.equal(paymentIntent?.metadata?.manualExecution?.mirageAttempted, true);
+  assert.equal(paymentIntent?.metadata?.manualExecution?.mirageError, "Invalid param WrongSize");
+});
+
+test("worker fallback receipt sends Telegram fallback confirmation text", async () => {
+  const { paylinkService } = await seedPendingAgentSpend({
+    telegram: {
+      telegramUserId: "777",
+      telegramChatId: "987654321",
+      controllerWallet: "owner-alpha"
+    }
+  });
+  const fallbackSignature = "7".repeat(88);
+  const sentMessages: Array<{ chatId: string; text: string }> = [];
+
+  const result = await runAgentWorkerOnce({
+    config: {
+      baseUrl: "http://localhost",
+      agentWalletName: "agent-treasury",
+      dryRun: false,
+      executionEnabled: true,
+      telegramBotToken: "test-token",
+      mirageExecutionMint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+      executionFallbackMode: "solana-devnet-spl",
+      solanaExecutorSecretKeyJson: "[1,2,3]"
+    },
+    fetch: await createWorkerFetch(paylinkService),
+    executeMirage: async () => {
+      throw new Error("AccountNotFound");
+    },
+    executeSolanaDevnetSpl: async () => ({ txSignature: fallbackSignature }),
+    telegramClient: {
+      async sendMessage(chatId, text) {
+        sentMessages.push({ chatId, text });
+      }
+    },
+    logger: {
+      log() {},
+      error() {}
+    }
+  });
+
+  assert.equal(result.confirmed, 1);
+  assert.equal(sentMessages.length, 1);
+  assert.equal(
+    sentMessages[0]?.text,
+    ["Execution confirmed", "Rail: Solana devnet SPL fallback", "Mirage command: attempted", `Tx: ${fallbackSignature}`].join(
+      "\n"
+    )
+  );
+});
+
 test("Telegram send failure does not undo receipt confirmation", async () => {
   const { paylinkService, paylink } = await seedPendingAgentSpend({
     telegram: {
@@ -762,6 +923,7 @@ test("browser API and webhook paths do not import execution helpers", async () =
   assert.equal(/node:child_process|child_process/.test(combined), false);
   assert.equal(/\bspawn\s*\(/.test(combined), false);
   assert.equal(/\bexec\s*\(/.test(combined), false);
+  assert.equal(/@solana\/spl-token|createSolanaDevnetSplExecutor|agent-worker\/solana-devnet-spl/.test(combined), false);
 });
 
 const run = async (): Promise<void> => {

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createRequire } from "node:module";
+import { Keypair, PublicKey } from "@solana/web3.js";
 
 type TestCase = {
   name: string;
@@ -28,6 +29,10 @@ type WorkerCheckModule = {
       options: { timeout: number },
       callback: (error: Error | null, stdout?: string, stderr?: string) => void
     ) => void;
+    solanaConnectionFactory?: () => {
+      getBalance: (publicKey: PublicKey, commitment: string) => Promise<number>;
+      getAccountInfo: (publicKey: PublicKey, commitment: string) => Promise<unknown>;
+    };
   }) => Promise<number>;
 };
 
@@ -65,6 +70,28 @@ const runCheck = async (env: Partial<NodeJS.ProcessEnv>): Promise<CheckResult> =
     stderr(message) {
       stderr += `${message}\n`;
     }
+  });
+  return { status, stdout, stderr };
+};
+
+const runCheckWithOptions = async (
+  env: Partial<NodeJS.ProcessEnv>,
+  options: Pick<Parameters<WorkerCheckModule["runAgentWorkerCheck"]>[0], "solanaConnectionFactory"> = {}
+): Promise<CheckResult> => {
+  let stdout = "";
+  let stderr = "";
+  const status = await runAgentWorkerCheck({
+    env: {
+      ...process.env,
+      ...env
+    },
+    stdout(message) {
+      stdout += `${message}\n`;
+    },
+    stderr(message) {
+      stderr += `${message}\n`;
+    },
+    ...options
   });
   return { status, stdout, stderr };
 };
@@ -301,6 +328,65 @@ test("worker check warns when Mirage version is unavailable", async () => {
     assert.equal(status, 0);
     assert.match(combined, /Mirage version was not available/);
     assert.doesNotMatch(combined, /version unavailable/);
+  });
+});
+
+test("worker check validates Solana devnet SPL fallback keypair and SOL", async () => {
+  await withWorkerEndpoint(async (baseUrl) => {
+    const keypair = Keypair.generate();
+    let checkedBalanceFor = "";
+    let checkedAta = false;
+    const result = await runCheckWithOptions(
+      {
+        WHISPERVAULT_BASE_URL: baseUrl,
+        WHISPERVAULT_WORKER_SECRET: "worker-secret",
+        TELEGRAM_BOT_TOKEN: "token",
+        MIRAGE_EXECUTION_ENABLED: "false",
+        EXECUTION_FALLBACK_MODE: "solana-devnet-spl",
+        MIRAGE_EXECUTION_MINT: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+        SOLANA_EXECUTOR_SECRET_KEY_JSON: JSON.stringify(Array.from(keypair.secretKey)),
+        PATH: emptyPath()
+      },
+      {
+        solanaConnectionFactory: () => ({
+          async getBalance(publicKey) {
+            checkedBalanceFor = publicKey.toBase58();
+            return 1;
+          },
+          async getAccountInfo() {
+            checkedAta = true;
+            return {};
+          }
+        })
+      }
+    );
+    const combined = `${result.stdout}\n${result.stderr}`;
+
+    assert.equal(result.status, 0);
+    assert.equal(checkedBalanceFor, keypair.publicKey.toBase58());
+    assert.equal(checkedAta, true);
+    assert.match(combined, /SOLANA_EXECUTOR_SECRET_KEY_JSON parsed/);
+    assert.match(combined, /Executor has devnet SOL/);
+    assert.match(combined, /Executor associated token account exists/);
+  });
+});
+
+test("worker check fails when fallback keypair JSON is invalid", async () => {
+  await withWorkerEndpoint(async (baseUrl) => {
+    const result = await runCheckWithOptions({
+      WHISPERVAULT_BASE_URL: baseUrl,
+      WHISPERVAULT_WORKER_SECRET: "worker-secret",
+      TELEGRAM_BOT_TOKEN: "token",
+      MIRAGE_EXECUTION_ENABLED: "false",
+      EXECUTION_FALLBACK_MODE: "solana-devnet-spl",
+      MIRAGE_EXECUTION_MINT: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+      SOLANA_EXECUTOR_SECRET_KEY_JSON: "not json",
+      PATH: emptyPath()
+    });
+    const combined = `${result.stdout}\n${result.stderr}`;
+
+    assert.notEqual(result.status, 0);
+    assert.match(combined, /SOLANA_EXECUTOR_SECRET_KEY_JSON must be a JSON array/);
   });
 });
 

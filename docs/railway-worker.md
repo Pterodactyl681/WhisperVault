@@ -114,6 +114,45 @@ npm run agent:worker:daemon
 
 `npm run agent:worker:check` prints readiness status, the control-plane endpoint, Node version, Mirage executable path, Telegram readiness, and Mirage wallet-address lookup readiness without printing secret values or Mirage command output. It fails for missing `WHISPERVAULT_BASE_URL`, missing `WHISPERVAULT_WORKER_SECRET`, `MIRAGE_EXECUTION_ENABLED=true` with no `mirage` executable on `PATH`, or `MIRAGE_EXECUTION_ENABLED=true` when `mirage address --wallet <AGENT_WALLET_NAME>` cannot resolve the worker wallet.
 
+## Hackathon fallback mode while Mirage SPL transfer issue is isolated
+
+Use this mode only on the Railway worker execution service while Mirage devnet SPL transfers are being isolated. The browser, Next.js API routes, and Telegram webhook must not execute transfers. They only create pending spends and accept worker confirmations.
+
+Keep the user-facing token label as `USDC` in Telegram, UI, and receipts. The worker still validates and logs the Mirage transfer command from the pending spend, but when `MIRAGE_EXECUTION_MINT` is set it replaces the actual Mirage `--mint` argument with the devnet mint address before execution.
+
+Required Railway variables:
+
+```txt
+MIRAGE_EXECUTION_ENABLED=true
+MIRAGE_EXECUTION_MINT=4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU
+EXECUTION_FALLBACK_MODE=solana-devnet-spl
+SOLANA_EXECUTOR_SECRET_KEY_JSON=<json array keypair>
+```
+
+Behavior:
+
+- The worker tries Mirage first.
+- If Mirage succeeds, confirmation remains a normal Mirage CLI confirmation.
+- If Mirage fails and `EXECUTION_FALLBACK_MODE=solana-devnet-spl`, the Railway worker sends a real Solana devnet SPL token transfer using the keypair in `SOLANA_EXECUTOR_SECRET_KEY_JSON`.
+- The fallback uses `MIRAGE_EXECUTION_MINT` as the SPL mint, treats devnet USDC as 6 decimals, creates the recipient ATA when missing, confirms the transaction, and posts the tx signature back to the control plane.
+- The receipt metadata includes `executionRail=solana-devnet-spl-fallback`, `mirageAttempted=true`, and `mirageError=<error message>`.
+- Telegram confirmation for fallback says:
+
+```txt
+Execution confirmed
+Rail: Solana devnet SPL fallback
+Mirage command: attempted
+Tx: <signature>
+```
+
+Before enabling the daemon, run:
+
+```txt
+npm run agent:worker:check
+```
+
+With fallback mode enabled, the check validates that `SOLANA_EXECUTOR_SECRET_KEY_JSON` parses as a Solana keypair, validates the executor has devnet SOL for fees, and checks the associated token account for `MIRAGE_EXECUTION_MINT` or warns that it can be created.
+
 ## Worker Logs
 
 Expected worker logs include:

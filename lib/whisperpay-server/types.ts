@@ -77,6 +77,9 @@ export interface ServerManualExecutionMetadata {
   executor: "mirage-cli" | string;
   txSignature: string;
   confirmedAt: string;
+  executionRail?: string;
+  mirageAttempted?: boolean;
+  mirageError?: string;
 }
 
 export type ServerPaymentIntentStatusChange =

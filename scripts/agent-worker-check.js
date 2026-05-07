@@ -3,6 +3,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { execFile } = require("node:child_process");
+const { clusterApiUrl, Connection, Keypair, PublicKey } = require("@solana/web3.js");
+const { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } = require("@solana/spl-token");
 
 const PENDING_EXECUTION_PATH = "/api/agent-spend/pending-execution";
 const WORKER_SECRET_HEADER = "x-whispervault-worker-secret";
@@ -12,6 +14,22 @@ const DEFAULT_ENDPOINT_TIMEOUT_MS = 5000;
 const readEnv = (env, name) => env[name]?.trim() ?? "";
 
 const boolEnv = (env, name) => readEnv(env, name).toLowerCase() === "true";
+
+const parseExecutorKeypair = (secretKeyJson) => {
+  let parsed;
+
+  try {
+    parsed = JSON.parse(secretKeyJson);
+  } catch {
+    throw new Error("SOLANA_EXECUTOR_SECRET_KEY_JSON must be a JSON array.");
+  }
+
+  if (!Array.isArray(parsed) || parsed.length !== 64 || !parsed.every((value) => Number.isInteger(value))) {
+    throw new Error("SOLANA_EXECUTOR_SECRET_KEY_JSON must be a JSON array keypair with 64 integer values.");
+  }
+
+  return Keypair.fromSecretKey(Uint8Array.from(parsed));
+};
 
 const executableCandidates = (command, env) => {
   const extension = path.extname(command);
@@ -119,6 +137,82 @@ const runMirageAddressCheck = (miragePath, agentWalletName, execFileFn) =>
     });
   });
 
+const runSolanaFallbackCheck = async (env, connectionFactory, pass, warn, fail) => {
+  const fallbackMode = readEnv(env, "EXECUTION_FALLBACK_MODE");
+
+  if (fallbackMode !== "solana-devnet-spl") {
+    return 0;
+  }
+
+  const mintValue = readEnv(env, "MIRAGE_EXECUTION_MINT");
+  const secretKeyJson = readEnv(env, "SOLANA_EXECUTOR_SECRET_KEY_JSON");
+  let exitCode = 0;
+
+  if (!mintValue) {
+    fail("MIRAGE_EXECUTION_MINT is required when EXECUTION_FALLBACK_MODE=solana-devnet-spl.");
+    exitCode = 1;
+  }
+
+  if (!secretKeyJson) {
+    fail("SOLANA_EXECUTOR_SECRET_KEY_JSON is required when EXECUTION_FALLBACK_MODE=solana-devnet-spl.");
+    exitCode = 1;
+  }
+
+  if (!mintValue || !secretKeyJson) {
+    return exitCode;
+  }
+
+  let executor;
+  let mint;
+
+  try {
+    executor = parseExecutorKeypair(secretKeyJson);
+    pass(`SOLANA_EXECUTOR_SECRET_KEY_JSON parsed; executor public key ${executor.publicKey.toBase58()}.`);
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+    return 1;
+  }
+
+  try {
+    mint = new PublicKey(mintValue);
+    pass("MIRAGE_EXECUTION_MINT is a valid Solana public key.");
+  } catch {
+    fail("MIRAGE_EXECUTION_MINT must be a valid Solana public key.");
+    return 1;
+  }
+
+  const connection =
+    connectionFactory?.(env) ?? new Connection(readEnv(env, "SOLANA_RPC_URL") || clusterApiUrl("devnet"), "confirmed");
+
+  try {
+    const lamports = await connection.getBalance(executor.publicKey, "confirmed");
+
+    if (lamports > 0) {
+      pass("Executor has devnet SOL for transaction fees.");
+    } else {
+      fail("Executor has no devnet SOL for transaction fees.");
+      exitCode = 1;
+    }
+  } catch (error) {
+    warn(`Could not validate executor devnet SOL balance: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  try {
+    const ata = getAssociatedTokenAddressSync(mint, executor.publicKey, false, TOKEN_PROGRAM_ID);
+    const accountInfo = await connection.getAccountInfo(ata, "confirmed");
+
+    if (accountInfo) {
+      pass(`Executor associated token account exists: ${ata.toBase58()}.`);
+    } else {
+      warn(`Executor associated token account is missing but can be created: ${ata.toBase58()}.`);
+    }
+  } catch (error) {
+    warn(`Could not validate executor associated token account: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  return exitCode;
+};
+
 const runAgentWorkerCheck = async (options = {}) => {
   const env = options.env ?? process.env;
   const stdout = options.stdout ?? ((message) => console.log(message));
@@ -135,6 +229,7 @@ const runAgentWorkerCheck = async (options = {}) => {
   const agentWalletName = readEnv(env, "AGENT_WALLET_NAME") || DEFAULT_AGENT_WALLET_NAME;
   const rawExecutionEnabled = readEnv(env, "MIRAGE_EXECUTION_ENABLED");
   const executionEnabled = boolEnv(env, "MIRAGE_EXECUTION_ENABLED");
+  const fallbackMode = readEnv(env, "EXECUTION_FALLBACK_MODE");
   const miragePath = resolveExecutable("mirage", env);
   let exitCode = 0;
 
@@ -175,6 +270,10 @@ const runAgentWorkerCheck = async (options = {}) => {
     warn("MIRAGE_EXECUTION_ENABLED is missing or not true; worker will run in dry-run/planning mode.");
   }
 
+  if (fallbackMode) {
+    log(`Execution fallback mode: ${fallbackMode}`);
+  }
+
   if (!miragePath && executionEnabled) {
     fail("Mirage CLI is missing from PATH while MIRAGE_EXECUTION_ENABLED=true.");
     exitCode = 1;
@@ -210,6 +309,11 @@ const runAgentWorkerCheck = async (options = {}) => {
     const endpoint = buildPendingEndpoint(baseUrl);
     log(`Pending execution endpoint: ${endpoint}`);
     await fetchEndpoint(endpoint, workerSecret, env, fetchFn, log, warn);
+  }
+
+  const fallbackExitCode = await runSolanaFallbackCheck(env, options.solanaConnectionFactory, pass, warn, fail);
+  if (fallbackExitCode !== 0) {
+    exitCode = fallbackExitCode;
   }
 
   return exitCode;

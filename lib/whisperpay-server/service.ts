@@ -65,6 +65,9 @@ interface ConfirmManualAgentSpendInput {
   paylinkId: string;
   txSignature: string;
   executor: string;
+  executionRail?: string;
+  mirageAttempted?: boolean;
+  mirageError?: string | null;
 }
 
 const assertNonEmptyString = (value: string, fieldName: string): string => {
@@ -418,7 +421,10 @@ export class WhisperPayServerService {
     metadata.manualExecution = {
       executor,
       txSignature,
-      confirmedAt: now
+      confirmedAt: now,
+      ...(input.executionRail ? { executionRail: input.executionRail } : {}),
+      ...(input.mirageAttempted !== undefined ? { mirageAttempted: input.mirageAttempted } : {}),
+      ...(input.mirageError ? { mirageError: input.mirageError } : {})
     };
     metadata.timeline = appendTimeline(metadata, "manual_mirage_execution_confirmed", now, "confirmed");
 

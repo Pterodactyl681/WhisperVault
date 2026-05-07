@@ -10,9 +10,11 @@ import {
   type AgentWorkerConfig,
   type AgentWorkerRunResult,
   type MirageExecutor,
+  type SolanaDevnetSplExecutor,
   type WorkerFetch,
   type WorkerLogger
 } from "./runner";
+import { createSolanaDevnetSplExecutor } from "./solana-devnet-spl";
 
 const execFileAsync = promisify(execFile);
 
@@ -85,6 +87,7 @@ interface RunAgentWorkerCliOptions {
   config?: AgentWorkerConfig;
   env?: NodeJS.ProcessEnv;
   executeMirage?: MirageExecutor;
+  executeSolanaDevnetSpl?: SolanaDevnetSplExecutor;
   fetch?: WorkerFetch;
   telegramClient?: TelegramBotClient;
 }
@@ -100,6 +103,8 @@ export const runAgentWorkerCliIteration = async (
   logger.log(`Control plane: ${config.baseUrl}`);
   logger.log(`Mirage executable: ${mirageExecutable ?? "not found on PATH"}`);
   logger.log(`Mirage execution enabled: ${config.executionEnabled ? "true" : "false"}`);
+  logger.log(`Execution fallback mode: ${config.executionFallbackMode || "disabled"}`);
+  logger.log(`Mirage execution mint: ${config.mirageExecutionMint || "USDC"}`);
   logger.log(
     config.telegramBotToken
       ? "Telegram notification: configured"
@@ -113,6 +118,7 @@ export const runAgentWorkerCliIteration = async (
   const result = await runAgentWorkerOnce({
     config,
     executeMirage: options.executeMirage ?? executeMirage,
+    executeSolanaDevnetSpl: options.executeSolanaDevnetSpl ?? createSolanaDevnetSplExecutor(),
     fetch: options.fetch,
     telegramClient: options.telegramClient,
     logger

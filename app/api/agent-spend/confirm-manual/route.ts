@@ -2,10 +2,22 @@ import { defaultIsAgentVaultEnabled, errorResponse, handleKnownError, parseJsonO
 import { isLikelySolanaSignature } from "@/lib/solana-validation";
 import { whisperPayServerService } from "@/lib/whisperpay-server";
 
-const parseConfirmManualBody = (body: Record<string, unknown>): { paylinkId: string; txSignature: string; executor: string } => {
+const parseConfirmManualBody = (
+  body: Record<string, unknown>
+): {
+  paylinkId: string;
+  txSignature: string;
+  executor: string;
+  executionRail?: string;
+  mirageAttempted?: boolean;
+  mirageError?: string;
+} => {
   const paylinkId = typeof body.paylinkId === "string" ? body.paylinkId.trim() : "";
   const txSignature = typeof body.txSignature === "string" ? body.txSignature.trim() : "";
   const executor = typeof body.executor === "string" ? body.executor.trim() : "";
+  const executionRail = typeof body.executionRail === "string" ? body.executionRail.trim() : "";
+  const mirageAttempted = typeof body.mirageAttempted === "boolean" ? body.mirageAttempted : undefined;
+  const mirageError = typeof body.mirageError === "string" ? body.mirageError.trim() : "";
 
   if (!paylinkId) {
     throw new Error("paylinkId is required.");
@@ -15,14 +27,17 @@ const parseConfirmManualBody = (body: Record<string, unknown>): { paylinkId: str
     throw new Error("txSignature must look like a Solana signature.");
   }
 
-  if (executor !== "mirage-cli") {
-    throw new Error("executor must be mirage-cli.");
+  if (executor !== "mirage-cli" && executor !== "solana-devnet-spl-fallback") {
+    throw new Error("executor must be mirage-cli or solana-devnet-spl-fallback.");
   }
 
   return {
     paylinkId,
     txSignature,
-    executor
+    executor,
+    ...(executionRail ? { executionRail } : {}),
+    ...(mirageAttempted !== undefined ? { mirageAttempted } : {}),
+    ...(mirageError ? { mirageError } : {})
   };
 };
 
@@ -43,8 +58,20 @@ export const POST = async (request: Request): Promise<Response> => {
       txSignature: paymentIntent.txSignature,
       receipt: {
         paymentStatus: "Confirmed",
-        execution: "Mirage CLI",
-        devnetTx: paymentIntent.txSignature
+        execution:
+          paymentIntent.metadata?.manualExecution?.executionRail === "solana-devnet-spl-fallback"
+            ? "Solana devnet SPL fallback"
+            : "Mirage CLI",
+        devnetTx: paymentIntent.txSignature,
+        ...(paymentIntent.metadata?.manualExecution?.executionRail
+          ? { executionRail: paymentIntent.metadata.manualExecution.executionRail }
+          : {}),
+        ...(paymentIntent.metadata?.manualExecution?.mirageAttempted !== undefined
+          ? { mirageAttempted: paymentIntent.metadata.manualExecution.mirageAttempted }
+          : {}),
+        ...(paymentIntent.metadata?.manualExecution?.mirageError
+          ? { mirageError: paymentIntent.metadata.manualExecution.mirageError }
+          : {})
       }
     });
   } catch (error) {
