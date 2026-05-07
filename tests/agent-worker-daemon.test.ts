@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import { parseWorkerPollIntervalMs, runAgentWorkerDaemon } from "../lib/agent-worker";
+import {
+  assertRequiredAgentWorkerDaemonEnv,
+  parseWorkerPollIntervalMs,
+  runAgentWorkerDaemon,
+  type AgentWorkerRunResult
+} from "../lib/agent-worker";
 
 type TestCase = {
   name: string;
@@ -125,13 +130,16 @@ test("daemon catches iteration errors and continues polling", async () => {
   const signalHost = createFakeSignalHost();
   const sleepController = createFakeSleepController();
   const errors: string[] = [];
+  const logs: string[] = [];
   let runCount = 0;
   const daemon = runAgentWorkerDaemon({
     logger: {
       error(message) {
         errors.push(message);
       },
-      log() {}
+      log(message) {
+        logs.push(message);
+      }
     },
     pollIntervalMs: 25,
     runOnce: async () => {
@@ -150,7 +158,98 @@ test("daemon catches iteration errors and continues polling", async () => {
   await flush();
   assert.equal(runCount, 1);
   assert.equal(errors.length, 1);
-  assert.match(errors[0] ?? "", /Worker iteration 1 failed: boom/);
+  assert.match(errors[0] ?? "", /Worker iteration 1 failed: boom; continuing/);
+  assert.ok(logs.includes("Waiting for next poll..."));
+  assert.equal(sleepController.sleeps.length, 1);
+
+  sleepController.sleeps[0]?.release();
+  await daemon;
+  assert.equal(runCount, 2);
+});
+
+test("daemon logs safe-mode iteration counts and continues polling", async () => {
+  const signalHost = createFakeSignalHost();
+  const sleepController = createFakeSleepController();
+  const logs: string[] = [];
+  let runCount = 0;
+  const safeModeResult: AgentWorkerRunResult = {
+    fetched: 2,
+    planned: 2,
+    executed: 0,
+    confirmed: 0,
+    errors: []
+  };
+  const daemon = runAgentWorkerDaemon({
+    logger: {
+      error() {},
+      log(message) {
+        logs.push(message);
+      }
+    },
+    pollIntervalMs: 25,
+    runOnce: async () => {
+      runCount += 1;
+      if (runCount === 2) {
+        signalHost.emit("SIGTERM");
+      }
+      return safeModeResult;
+    },
+    signalHost,
+    sleep: sleepController.sleep
+  });
+
+  await flush();
+  assert.equal(runCount, 1);
+  assert.ok(logs.includes("Worker iteration completed: fetched=2 planned=2 executed=0 confirmed=0"));
+  assert.ok(logs.includes("Waiting for next poll..."));
+  assert.equal(sleepController.sleeps.length, 1);
+
+  sleepController.sleeps[0]?.release();
+  await daemon;
+  assert.equal(runCount, 2);
+});
+
+test("daemon continues after per-spend execution errors", async () => {
+  const signalHost = createFakeSignalHost();
+  const sleepController = createFakeSleepController();
+  const errors: string[] = [];
+  let runCount = 0;
+  const daemon = runAgentWorkerDaemon({
+    logger: {
+      error(message) {
+        errors.push(message);
+      },
+      log() {}
+    },
+    pollIntervalMs: 25,
+    runOnce: async () => {
+      runCount += 1;
+      if (runCount === 1) {
+        return {
+          fetched: 1,
+          planned: 1,
+          executed: 0,
+          confirmed: 0,
+          errors: ["pl_worker_paylink: mirage failed"]
+        };
+      }
+
+      signalHost.emit("SIGTERM");
+      return {
+        fetched: 0,
+        planned: 0,
+        executed: 0,
+        confirmed: 0,
+        errors: []
+      };
+    },
+    signalHost,
+    sleep: sleepController.sleep
+  });
+
+  await flush();
+  assert.equal(runCount, 1);
+  assert.ok(errors.some((message) => message.includes("had 1 spend error(s); continuing")));
   assert.equal(sleepController.sleeps.length, 1);
 
   sleepController.sleeps[0]?.release();
@@ -200,6 +299,23 @@ test("parseWorkerPollIntervalMs defaults to 30000", async () => {
 test("parseWorkerPollIntervalMs rejects invalid values", async () => {
   assert.throws(() => parseWorkerPollIntervalMs({ WORKER_POLL_INTERVAL_MS: "0" }), /positive number/);
   assert.throws(() => parseWorkerPollIntervalMs({ WORKER_POLL_INTERVAL_MS: "nan" }), /positive number/);
+});
+
+test("daemon startup requires control-plane URL and worker secret", async () => {
+  assert.throws(
+    () => assertRequiredAgentWorkerDaemonEnv({ WHISPERVAULT_BASE_URL: "", WHISPERVAULT_WORKER_SECRET: "secret" }),
+    /WHISPERVAULT_BASE_URL is required/
+  );
+  assert.throws(
+    () => assertRequiredAgentWorkerDaemonEnv({ WHISPERVAULT_BASE_URL: "https:\/\/example.com", WHISPERVAULT_WORKER_SECRET: "" }),
+    /WHISPERVAULT_WORKER_SECRET is required/
+  );
+  assert.doesNotThrow(() =>
+    assertRequiredAgentWorkerDaemonEnv({
+      WHISPERVAULT_BASE_URL: "https://example.com",
+      WHISPERVAULT_WORKER_SECRET: "secret"
+    })
+  );
 });
 
 const run = async (): Promise<void> => {

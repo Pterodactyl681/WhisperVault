@@ -1,4 +1,4 @@
-import type { WorkerLogger } from "./runner";
+import type { AgentWorkerRunResult, WorkerLogger } from "./runner";
 
 const DEFAULT_WORKER_POLL_INTERVAL_MS = 30_000;
 
@@ -18,7 +18,7 @@ interface AgentWorkerSleep {
 interface RunAgentWorkerDaemonOptions {
   logger?: WorkerLogger;
   pollIntervalMs?: number;
-  runOnce: () => Promise<number>;
+  runOnce: () => Promise<number | AgentWorkerRunResult>;
   signalHost?: AgentWorkerSignalHost;
   sleep?: (ms: number) => AgentWorkerSleep;
 }
@@ -71,6 +71,9 @@ export const parseWorkerPollIntervalMs = (
   return Math.floor(parsed);
 };
 
+const isWorkerRunResult = (value: number | AgentWorkerRunResult): value is AgentWorkerRunResult =>
+  typeof value === "object" && value !== null;
+
 export const runAgentWorkerDaemon = async (options: RunAgentWorkerDaemonOptions): Promise<void> => {
   const logger = options.logger ?? console;
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_WORKER_POLL_INTERVAL_MS;
@@ -100,19 +103,29 @@ export const runAgentWorkerDaemon = async (options: RunAgentWorkerDaemonOptions)
       iteration += 1;
 
       try {
-        const exitCode = await options.runOnce();
-        if (exitCode !== 0) {
-          logger.error(`Worker iteration ${iteration} completed with exit code ${exitCode}.`);
+        const runResult = await options.runOnce();
+
+        if (isWorkerRunResult(runResult)) {
+          logger.log(
+            `Worker iteration completed: fetched=${runResult.fetched} planned=${runResult.planned} executed=${runResult.executed} confirmed=${runResult.confirmed}`
+          );
+
+          if (runResult.errors.length > 0) {
+            logger.error(`Worker iteration ${iteration} had ${runResult.errors.length} spend error(s); continuing.`);
+          }
+        } else if (runResult !== 0) {
+          logger.error(`Worker iteration ${iteration} completed with exit code ${runResult}; continuing.`);
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        logger.error(`Worker iteration ${iteration} failed: ${message}`);
+        logger.error(`Worker iteration ${iteration} failed: ${message}; continuing.`);
       }
 
       if (shouldStop) {
         break;
       }
 
+      logger.log("Waiting for next poll...");
       currentSleep = sleep(pollIntervalMs);
       await currentSleep.promise;
       currentSleep = null;

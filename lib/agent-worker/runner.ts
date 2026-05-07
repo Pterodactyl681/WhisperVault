@@ -47,6 +47,18 @@ const DEFAULT_AGENT_WALLET_NAME = "agent-treasury";
 const PENDING_EXECUTION_PATH = "/api/agent-spend/pending-execution";
 const CONFIRM_MANUAL_PATH = "/api/agent-spend/confirm-manual";
 
+export const assertRequiredAgentWorkerDaemonEnv = (
+  env: Record<string, string | undefined> = process.env
+): void => {
+  if (!env.WHISPERVAULT_BASE_URL?.trim()) {
+    throw new Error("WHISPERVAULT_BASE_URL is required for the Agent Worker daemon.");
+  }
+
+  if (!env.WHISPERVAULT_WORKER_SECRET?.trim()) {
+    throw new Error("WHISPERVAULT_WORKER_SECRET is required for the Agent Worker daemon.");
+  }
+};
+
 export const parseAgentWorkerConfig = (
   env: NodeJS.ProcessEnv = process.env,
   argv: string[] = process.argv.slice(2)
@@ -272,7 +284,8 @@ export const runAgentWorkerOnce = async (
       }
 
       if (!options.config.executionEnabled) {
-        throw new Error("MIRAGE_EXECUTION_ENABLED must be true for non-dry-run execution.");
+        logger.log(`Safe mode skip ${spend.paylinkId}: MIRAGE_EXECUTION_ENABLED=false; Mirage execution disabled.`);
+        continue;
       }
 
       if (!options.executeMirage) {

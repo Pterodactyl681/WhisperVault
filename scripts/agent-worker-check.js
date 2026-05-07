@@ -2,6 +2,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { execFile } = require("node:child_process");
 
 const PENDING_EXECUTION_PATH = "/api/agent-spend/pending-execution";
 const WORKER_SECRET_HEADER = "x-whispervault-worker-secret";
@@ -71,7 +72,7 @@ const fetchEndpoint = async (endpoint, workerSecret, env, fetchFn, log, warn) =>
     });
 
     if (response.ok) {
-      log(`Worker endpoint: reachable (${response.status})`);
+      log(`PASS Worker endpoint: reachable (${response.status})`);
     } else {
       warn(`Worker endpoint responded with HTTP ${response.status}`);
     }
@@ -83,14 +84,31 @@ const fetchEndpoint = async (endpoint, workerSecret, env, fetchFn, log, warn) =>
   }
 };
 
+const runMirageAddressCheck = (miragePath, agentWalletName, execFileFn) =>
+  new Promise((resolve) => {
+    execFileFn(miragePath, ["address", "--wallet", agentWalletName], { timeout: 10000 }, (error) => {
+      if (error) {
+        resolve({
+          ok: false,
+          message: error instanceof Error ? error.message : String(error)
+        });
+        return;
+      }
+
+      resolve({ ok: true });
+    });
+  });
+
 const runAgentWorkerCheck = async (options = {}) => {
   const env = options.env ?? process.env;
   const stdout = options.stdout ?? ((message) => console.log(message));
   const stderr = options.stderr ?? ((message) => console.error(message));
   const fetchFn = options.fetch ?? fetch;
+  const execFileFn = options.execFile ?? execFile;
   const log = (message) => stdout(message);
+  const pass = (message) => stdout(`PASS ${message}`);
   const warn = (message) => stderr(`WARN ${message}`);
-  const fail = (message) => stderr(`ERROR ${message}`);
+  const fail = (message) => stderr(`FAIL ${message}`);
   const baseUrl = readEnv(env, "WHISPERVAULT_BASE_URL");
   const workerSecret = readEnv(env, "WHISPERVAULT_WORKER_SECRET");
   const telegramBotToken = readEnv(env, "TELEGRAM_BOT_TOKEN");
@@ -102,32 +120,38 @@ const runAgentWorkerCheck = async (options = {}) => {
 
   log("WhisperVault Agent Worker check");
   log(`Node version: ${process.version}`);
-  log(`WHISPERVAULT_BASE_URL: ${baseUrl ? "set" : "missing"}`);
-  log(`WHISPERVAULT_WORKER_SECRET: ${workerSecret ? "set" : "missing"}`);
-  log(`TELEGRAM_BOT_TOKEN: ${telegramBotToken ? "set" : "missing"}`);
-  log(`AGENT_WALLET_NAME: ${agentWalletName}`);
-  log(`MIRAGE_EXECUTION_ENABLED: ${rawExecutionEnabled ? (executionEnabled ? "true" : "not true") : "missing"}`);
-  log(`Mirage executable: ${miragePath ?? "not found on PATH"}`);
 
   if (!baseUrl) {
     fail("WHISPERVAULT_BASE_URL is required for the worker.");
     exitCode = 1;
+  } else {
+    pass("WHISPERVAULT_BASE_URL is set.");
   }
 
   if (!workerSecret) {
     fail("WHISPERVAULT_WORKER_SECRET is required for the worker.");
     exitCode = 1;
+  } else {
+    pass("WHISPERVAULT_WORKER_SECRET is set.");
   }
 
   if (!telegramBotToken) {
     warn("TELEGRAM_BOT_TOKEN is missing; Telegram push will be skipped.");
+  } else {
+    pass("TELEGRAM_BOT_TOKEN is set.");
   }
 
   if (!readEnv(env, "AGENT_WALLET_NAME")) {
     warn(`AGENT_WALLET_NAME is missing; ${DEFAULT_AGENT_WALLET_NAME} will be used.`);
+  } else {
+    pass(`AGENT_WALLET_NAME is set to ${agentWalletName}.`);
   }
 
-  if (!executionEnabled) {
+  if (executionEnabled) {
+    pass("MIRAGE_EXECUTION_ENABLED=true; real Mirage execution checks are active.");
+  } else if (!rawExecutionEnabled) {
+    warn("MIRAGE_EXECUTION_ENABLED is missing; worker will run in dry-run/planning mode.");
+  } else {
     warn("MIRAGE_EXECUTION_ENABLED is missing or not true; worker will run in dry-run/planning mode.");
   }
 
@@ -136,6 +160,21 @@ const runAgentWorkerCheck = async (options = {}) => {
     exitCode = 1;
   } else if (!miragePath) {
     warn("Mirage CLI is missing from PATH; real execution is unavailable until Mirage is installed.");
+  } else {
+    pass(`Mirage CLI found at ${miragePath}.`);
+  }
+
+  if (executionEnabled && miragePath) {
+    const addressCheck = await runMirageAddressCheck(miragePath, agentWalletName, execFileFn);
+
+    if (addressCheck.ok) {
+      pass("Mirage wallet address lookup succeeded.");
+    } else {
+      fail(
+        `Mirage wallet address lookup failed for AGENT_WALLET_NAME=${agentWalletName}; confirm this wallet exists on the worker host or Railway volume.`
+      );
+      exitCode = 1;
+    }
   }
 
   if (baseUrl && workerSecret) {

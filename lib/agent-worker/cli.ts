@@ -2,10 +2,15 @@ import { execFile } from "node:child_process";
 import { accessSync, statSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
+import type { TelegramBotClient } from "../telegram/client";
 import {
   parseAgentWorkerConfig,
   runAgentWorkerOnce,
   type MirageExecutionResult,
+  type AgentWorkerConfig,
+  type AgentWorkerRunResult,
+  type MirageExecutor,
+  type WorkerFetch,
   type WorkerLogger
 } from "./runner";
 
@@ -75,8 +80,20 @@ export const executeMirage = async (argv: string[]): Promise<MirageExecutionResu
   }
 };
 
-export const runAgentWorkerCliOnce = async (logger: WorkerLogger = console): Promise<number> => {
-  const config = parseAgentWorkerConfig();
+interface RunAgentWorkerCliOptions {
+  argv?: string[];
+  config?: AgentWorkerConfig;
+  env?: NodeJS.ProcessEnv;
+  executeMirage?: MirageExecutor;
+  fetch?: WorkerFetch;
+  telegramClient?: TelegramBotClient;
+}
+
+export const runAgentWorkerCliIteration = async (
+  logger: WorkerLogger = console,
+  options: RunAgentWorkerCliOptions = {}
+): Promise<AgentWorkerRunResult> => {
+  const config = options.config ?? parseAgentWorkerConfig(options.env, options.argv);
   const mirageExecutable = resolveExecutable("mirage");
 
   logger.log(config.dryRun ? "WhisperVault Agent Worker dry-run" : "WhisperVault Agent Worker");
@@ -95,7 +112,9 @@ export const runAgentWorkerCliOnce = async (logger: WorkerLogger = console): Pro
 
   const result = await runAgentWorkerOnce({
     config,
-    executeMirage,
+    executeMirage: options.executeMirage ?? executeMirage,
+    fetch: options.fetch,
+    telegramClient: options.telegramClient,
     logger
   });
 
@@ -103,5 +122,13 @@ export const runAgentWorkerCliOnce = async (logger: WorkerLogger = console): Pro
     `Worker result: fetched=${result.fetched} planned=${result.planned} executed=${result.executed} confirmed=${result.confirmed}`
   );
 
+  return result;
+};
+
+export const runAgentWorkerCliOnce = async (
+  logger: WorkerLogger = console,
+  options: RunAgentWorkerCliOptions = {}
+): Promise<number> => {
+  const result = await runAgentWorkerCliIteration(logger, options);
   return result.errors.length > 0 ? 1 : 0;
 };

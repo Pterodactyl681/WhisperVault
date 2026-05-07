@@ -662,6 +662,33 @@ WhisperVault can be deployed to Vercel as a devnet showcase/control plane.
 
 For Linux Mirage execution, deploy the agent worker separately on Railway with `Dockerfile.worker`. See [docs/railway-worker.md](docs/railway-worker.md).
 
+### Railway real Mirage execution setup
+
+Railway should deploy first with:
+
+```txt
+MIRAGE_EXECUTION_ENABLED=false
+```
+
+This is dry-run mode: the worker can reach Vercel, read pending spends, and validate planned Mirage commands without executing Mirage, confirming receipts, or sending execution-confirmed Telegram pushes.
+
+Only switch Railway to real execution after Mirage CLI is installed and the worker host has the Mirage wallet named by `AGENT_WALLET_NAME`:
+
+```txt
+AGENT_WALLET_NAME=agent-treasury
+MIRAGE_EXECUTION_ENABLED=true
+```
+
+Run the readiness check before starting real execution:
+
+```powershell
+npm.cmd run agent:worker:check
+```
+
+When execution is enabled, the check verifies `mirage` exists, checks `AGENT_WALLET_NAME`, and attempts `mirage address --wallet <AGENT_WALLET_NAME>`. It prints clear pass, warn, and fail lines and never prints secret values, wallet files, private keys, seed phrases, or Mirage command output.
+
+Never commit wallet files, private keys, seed phrases, `.env` files, or Railway secrets. If Mirage wallet files need to survive Railway redeploys, use a Railway persistent volume mounted at the Mirage wallet configuration path, initialize or import `agent-treasury` there through a trusted operator process, then rerun `npm.cmd run agent:worker:check` with `MIRAGE_EXECUTION_ENABLED=true`.
+
 Recommended Vercel environment variable:
 
 ```txt

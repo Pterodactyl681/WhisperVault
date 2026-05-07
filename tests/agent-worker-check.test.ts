@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -22,6 +22,12 @@ type WorkerCheckModule = {
     stdout: (message: string) => void;
     stderr: (message: string) => void;
     fetch?: typeof fetch;
+    execFile?: (
+      file: string,
+      args: string[],
+      options: { timeout: number },
+      callback: (error: Error | null) => void
+    ) => void;
   }) => Promise<number>;
 };
 
@@ -37,6 +43,13 @@ const { runAgentWorkerCheck } = requireFromHere(
 ) as WorkerCheckModule;
 
 const emptyPath = (): string => mkdtempSync(path.join(tmpdir(), "whispervault-empty-path-"));
+
+const pathWithMirageExecutable = (): string => {
+  const directory = mkdtempSync(path.join(tmpdir(), "whispervault-mirage-path-"));
+  const executableName = process.platform === "win32" ? "mirage.cmd" : "mirage";
+  writeFileSync(path.join(directory, executableName), "");
+  return directory;
+};
 
 const runCheck = async (env: Partial<NodeJS.ProcessEnv>): Promise<CheckResult> => {
   let stdout = "";
@@ -109,8 +122,8 @@ test("worker check does not print secret values", async () => {
     assert.equal(result.status, 0);
     assert.doesNotMatch(combined, /super-secret-worker-value/);
     assert.doesNotMatch(combined, /secret-telegram-token/);
-    assert.match(combined, /WHISPERVAULT_WORKER_SECRET: set/);
-    assert.match(combined, /TELEGRAM_BOT_TOKEN: set/);
+    assert.match(combined, /PASS WHISPERVAULT_WORKER_SECRET is set/);
+    assert.match(combined, /PASS TELEGRAM_BOT_TOKEN is set/);
   });
 });
 
@@ -174,6 +187,80 @@ test("worker check fails when execution is enabled and Mirage is missing", async
 
     assert.notEqual(result.status, 0);
     assert.match(combined, /Mirage CLI is missing from PATH while MIRAGE_EXECUTION_ENABLED=true/);
+  });
+});
+
+test("worker check attempts Mirage wallet address lookup when execution is enabled", async () => {
+  await withWorkerEndpoint(async (baseUrl) => {
+    let checkedFile = "";
+    let checkedArgs: string[] = [];
+    let checkedTimeout = 0;
+    let stdout = "";
+    let stderr = "";
+
+    const status = await runAgentWorkerCheck({
+      env: {
+        ...process.env,
+        WHISPERVAULT_BASE_URL: baseUrl,
+        WHISPERVAULT_WORKER_SECRET: "worker-secret",
+        TELEGRAM_BOT_TOKEN: "token",
+        AGENT_WALLET_NAME: "agent-treasury",
+        MIRAGE_EXECUTION_ENABLED: "true",
+        PATH: pathWithMirageExecutable()
+      },
+      stdout(message) {
+        stdout += `${message}\n`;
+      },
+      stderr(message) {
+        stderr += `${message}\n`;
+      },
+      execFile(file, args, options, callback) {
+        checkedFile = file;
+        checkedArgs = args;
+        checkedTimeout = options.timeout;
+        callback(null);
+      }
+    });
+    const combined = `${stdout}\n${stderr}`;
+
+    assert.equal(status, 0);
+    assert.match(path.basename(checkedFile), /^mirage/);
+    assert.deepEqual(checkedArgs, ["address", "--wallet", "agent-treasury"]);
+    assert.equal(checkedTimeout, 10000);
+    assert.match(combined, /Mirage wallet address lookup succeeded/);
+  });
+});
+
+test("worker check fails when real execution wallet lookup fails", async () => {
+  await withWorkerEndpoint(async (baseUrl) => {
+    let stdout = "";
+    let stderr = "";
+
+    const status = await runAgentWorkerCheck({
+      env: {
+        ...process.env,
+        WHISPERVAULT_BASE_URL: baseUrl,
+        WHISPERVAULT_WORKER_SECRET: "worker-secret",
+        TELEGRAM_BOT_TOKEN: "token",
+        AGENT_WALLET_NAME: "agent-treasury",
+        MIRAGE_EXECUTION_ENABLED: "true",
+        PATH: pathWithMirageExecutable()
+      },
+      stdout(message) {
+        stdout += `${message}\n`;
+      },
+      stderr(message) {
+        stderr += `${message}\n`;
+      },
+      execFile(_file, _args, _options, callback) {
+        callback(new Error("wallet missing"));
+      }
+    });
+    const combined = `${stdout}\n${stderr}`;
+
+    assert.notEqual(status, 0);
+    assert.match(combined, /Mirage wallet address lookup failed/);
+    assert.doesNotMatch(combined, /wallet missing/);
   });
 });
 

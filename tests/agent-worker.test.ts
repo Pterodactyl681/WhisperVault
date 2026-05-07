@@ -6,7 +6,7 @@ import { AgentPaymentLifecycleService } from "../lib/agent-payment-lifecycle";
 import { createPendingExecutionHttpHandlers } from "../lib/agent-spend/pending-execution-http";
 import { listPendingAgentSpendExecutions } from "../lib/agent-spend/pending-execution";
 import { WORKER_SECRET_HEADER } from "../lib/agent-spend/worker-auth";
-import { runAgentWorkerOnce, validateMirageTransferArgv } from "../lib/agent-worker";
+import { runAgentWorkerCliOnce, runAgentWorkerOnce, validateMirageTransferArgv } from "../lib/agent-worker";
 import type { TelegramBotClient } from "../lib/telegram/client";
 import { WhisperPayServerService } from "../lib/whisperpay-server/service";
 
@@ -251,6 +251,76 @@ test("worker dry-run does not confirm pending spends", async () => {
   assert.equal(result.planned, 1);
   assert.equal(result.confirmed, 0);
   assert.equal(confirmCalls, 0);
+});
+
+test("worker safe mode plans pending spends and exits 0", async () => {
+  const { paylinkService } = await seedPendingAgentSpend({
+    telegram: {
+      telegramUserId: "777",
+      telegramChatId: "987654321",
+      controllerWallet: "owner-alpha",
+      originalTelegramCommand: "/spend 5 buy coffee"
+    }
+  });
+  const pending = await listPendingAgentSpendExecutions({ paylinkService });
+  let confirmCalls = 0;
+  let executeCalls = 0;
+  const sentMessages: Array<{ chatId: string; text: string }> = [];
+  const logs: string[] = [];
+  const errors: string[] = [];
+
+  const exitCode = await runAgentWorkerCliOnce(
+    {
+      log(message) {
+        logs.push(message);
+      },
+      error(message) {
+        errors.push(message);
+      }
+    },
+    {
+      config: {
+        baseUrl: "http://localhost",
+        agentWalletName: "agent-treasury",
+        dryRun: false,
+        executionEnabled: false,
+        telegramBotToken: "test-token"
+      },
+      fetch: async (input) => {
+        const url = String(input);
+
+        if (url.endsWith("/api/agent-spend/pending-execution")) {
+          return Response.json({ pending });
+        }
+
+        if (url.endsWith("/api/agent-spend/confirm-manual")) {
+          confirmCalls += 1;
+          return Response.json({});
+        }
+
+        throw new Error(`Unexpected fetch: ${url}`);
+      },
+      executeMirage: async () => {
+        executeCalls += 1;
+        return {
+          stdout: VALID_SIGNATURE,
+          stderr: ""
+        };
+      },
+      telegramClient: {
+        async sendMessage(chatId, text) {
+          sentMessages.push({ chatId, text });
+        }
+      }
+    }
+  );
+  assert.equal(exitCode, 0);
+  assert.equal(executeCalls, 0);
+  assert.equal(confirmCalls, 0);
+  assert.equal(sentMessages.length, 0);
+  assert.equal(errors.length, 0);
+  assert.ok(logs.some((message) => message.includes("Safe mode skip")));
+  assert.ok(logs.some((message) => message.includes("Worker result: fetched=1 planned=1 executed=0 confirmed=0")));
 });
 
 test("worker supports raw pending-execution array response", async () => {
@@ -512,6 +582,52 @@ test("worker skips Telegram notification safely when token is missing", async ()
   assert.equal(result.confirmed, 1);
   assert.equal(sentMessages.length, 0);
   assert.ok(warnings.includes("Telegram notification: skipped (missing TELEGRAM_BOT_TOKEN)"));
+});
+
+test("worker Mirage failure does not confirm receipt", async () => {
+  const { paylinkService, paylink } = await seedPendingAgentSpend();
+  let confirmCalls = 0;
+  const errors: string[] = [];
+
+  const result = await runAgentWorkerOnce({
+    config: {
+      baseUrl: "http://localhost",
+      agentWalletName: "agent-treasury",
+      dryRun: false,
+      executionEnabled: true
+    },
+    fetch: async (input) => {
+      const url = String(input);
+
+      if (url.endsWith("/api/agent-spend/pending-execution")) {
+        return Response.json({ pending: await listPendingAgentSpendExecutions({ paylinkService }) });
+      }
+
+      if (url.endsWith("/api/agent-spend/confirm-manual")) {
+        confirmCalls += 1;
+        return Response.json({});
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    },
+    executeMirage: async () => {
+      throw new Error("mirage failed");
+    },
+    logger: {
+      log() {},
+      error(message) {
+        errors.push(message);
+      }
+    }
+  });
+
+  const paymentIntent = await paylinkService.getPaymentIntentByPaylinkId(paylink.id);
+  assert.equal(result.executed, 0);
+  assert.equal(result.confirmed, 0);
+  assert.equal(confirmCalls, 0);
+  assert.equal(paymentIntent?.metadata?.agentLifecycle?.budgetReservationState, "reserved");
+  assert.match(result.errors[0] ?? "", /mirage failed/);
+  assert.ok(errors.some((message) => message.includes("Skipped")));
 });
 
 test("Telegram send failure does not undo receipt confirmation", async () => {
