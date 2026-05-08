@@ -356,6 +356,36 @@ test("worker check validates MIRAGE_EXECUTION_MINT when set", async () => {
   });
 });
 
+test("worker check ignores MIRAGE_EXECUTION_MINT for native fallback mode", async () => {
+  await withWorkerEndpoint(async (baseUrl) => {
+    const keypair = Keypair.generate();
+    const result = await runCheckWithOptions(
+      {
+        WHISPERVAULT_BASE_URL: baseUrl,
+        WHISPERVAULT_WORKER_SECRET: "worker-secret",
+        TELEGRAM_BOT_TOKEN: "token",
+        MIRAGE_EXECUTION_ENABLED: "false",
+        EXECUTION_FALLBACK_MODE: "solana-devnet-native",
+        MIRAGE_EXECUTION_MINT: "USDC",
+        SOLANA_EXECUTOR_SECRET_KEY_JSON: JSON.stringify(Array.from(keypair.secretKey)),
+        PATH: emptyPath()
+      },
+      {
+        solanaConnectionFactory: () => ({
+          async getBalance() {
+            return 1;
+          }
+        })
+      }
+    );
+    const combined = `${result.stdout}\n${result.stderr}`;
+
+    assert.equal(result.status, 0);
+    assert.match(combined, /MIRAGE_EXECUTION_MINT is ignored when EXECUTION_FALLBACK_MODE=solana-devnet-native/);
+    assert.doesNotMatch(combined, /MIRAGE_EXECUTION_MINT must be a valid Solana public key/);
+  });
+});
+
 test("worker check validates Solana devnet native fallback keypair and SOL", async () => {
   await withWorkerEndpoint(async (baseUrl) => {
     const keypair = Keypair.generate();

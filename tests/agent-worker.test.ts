@@ -325,7 +325,7 @@ test("worker safe mode plans pending spends and exits 0", async () => {
   assert.equal(confirmCalls, 0);
   assert.equal(sentMessages.length, 0);
   assert.equal(errors.length, 0);
-  assert.ok(logs.includes("WORKER_BUILD_MARKER=native-fallback-v1"));
+  assert.ok(logs.includes("WORKER_BUILD_MARKER=native-fallback-v2"));
   assert.ok(logs.some((message) => message.includes("Safe mode skip")));
   assert.ok(logs.some((message) => message.includes("Worker result: fetched=1 planned=1 executed=0 confirmed=0")));
 });
@@ -691,8 +691,10 @@ test("worker Mirage failure triggers Solana devnet native fallback", async () =>
   const { paylinkService, paylink } = await seedPendingAgentSpend();
   const fallbackSignature = "6".repeat(88);
   let fallbackCalls = 0;
+  let mirageArgv: string[] = [];
   const confirmBodies: JsonRecord[] = [];
   const sentMessages: Array<{ chatId: string; text: string }> = [];
+  const logs: string[] = [];
 
   const result = await runAgentWorkerOnce({
     config: {
@@ -728,7 +730,8 @@ test("worker Mirage failure triggers Solana devnet native fallback", async () =>
 
       throw new Error(`Unexpected fetch: ${url}`);
     },
-    executeMirage: async () => {
+    executeMirage: async (argv) => {
+      mirageArgv = argv;
       throw new Error("Invalid param WrongSize");
     },
     executeSolanaDevnetNative: async (input) => {
@@ -746,7 +749,9 @@ test("worker Mirage failure triggers Solana devnet native fallback", async () =>
       }
     },
     logger: {
-      log() {},
+      log(message) {
+        logs.push(message);
+      },
       error() {}
     }
   });
@@ -754,6 +759,7 @@ test("worker Mirage failure triggers Solana devnet native fallback", async () =>
   const paymentIntent = await paylinkService.getPaymentIntentByPaylinkId(paylink.id);
   assert.equal(result.confirmed, 1);
   assert.equal(fallbackCalls, 1);
+  assert.equal(mirageArgv[mirageArgv.indexOf("--mint") + 1], "USDC");
   assert.equal(confirmBodies[0]?.executor, "solana-devnet-native-fallback");
   assert.equal(confirmBodies[0]?.executionRail, "solana-devnet-native-fallback");
   assert.equal(confirmBodies[0]?.mirageAttempted, true);
@@ -762,6 +768,10 @@ test("worker Mirage failure triggers Solana devnet native fallback", async () =>
   assert.equal(paymentIntent?.metadata?.manualExecution?.executionRail, "solana-devnet-native-fallback");
   assert.equal(paymentIntent?.metadata?.manualExecution?.mirageAttempted, true);
   assert.equal(paymentIntent?.metadata?.manualExecution?.mirageError, "Invalid param WrongSize");
+  assert.ok(logs.includes("trying Solana devnet native fallback"));
+  assert.ok(logs.includes("native fallback tx confirmed"));
+  assert.ok(logs.some((message) => message.includes("displayMint=USDC nativeFallback=true")));
+  assert.equal(logs.some((message) => message.includes("executionMint=")), false);
 });
 
 test("worker fallback receipt sends Telegram fallback confirmation text", async () => {
@@ -952,6 +962,15 @@ test("browser API and webhook paths do not import execution helpers", async () =
     /@solana\/spl-token|createSolanaDevnetNativeExecutor|agent-worker\/solana-devnet-native/.test(combined),
     false
   );
+});
+
+test("Solana devnet native fallback source stays native-only", async () => {
+  const source = readFileSync(path.join(process.cwd(), "lib", "agent-worker", "solana-devnet-native.ts"), "utf8");
+
+  assert.doesNotMatch(source, /@solana\/spl-token|associated token|createAssociatedToken|executionMint/);
+  assert.match(source, /SystemProgram\.transfer/);
+  assert.match(source, /FALLBACK_LAMPORTS = 5_000/);
+  assert.match(source, /"native-fallback"/);
 });
 
 const run = async (): Promise<void> => {

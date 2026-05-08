@@ -33,7 +33,7 @@ export const parseSolanaExecutorKeypair = (secretKeyJson: string): Keypair => {
 const buildFallbackMemo = (input: SolanaDevnetNativeTransferInput): string =>
   [
     "whispervault",
-    "fallback",
+    "native-fallback",
     input.paylinkId,
     input.agentId,
     input.displayAmount,

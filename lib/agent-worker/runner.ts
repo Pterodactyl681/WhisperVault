@@ -350,13 +350,22 @@ export const runAgentWorkerOnce = async (
       const argv = validateMirageTransferArgv(spend.mirage.argv, {
         agentWalletName: options.config.agentWalletName
       });
-      const executionMint = resolveExecutionMint(spend, options.config);
-      const executionArgv = replaceMirageMintArg(argv, executionMint);
+      const nativeFallbackEnabled = isSolanaDevnetNativeFallbackEnabled(options.config);
+      let executionArgv = argv;
       result.planned += 1;
-      logger.log(`displayMint=${spend.mint} executionMint=${executionMint}`);
-      logger.log(
-        `Planned spend ${spend.paylinkId}: amount=${spend.amount} displayMint=${spend.mint} executionMint=${executionMint} agentId=${spend.agentId}`
-      );
+      if (nativeFallbackEnabled) {
+        logger.log(`displayMint=${spend.mint} nativeFallback=true`);
+        logger.log(
+          `Planned spend ${spend.paylinkId}: amount=${spend.amount} displayMint=${spend.mint} agentId=${spend.agentId}`
+        );
+      } else {
+        const executionMint = resolveExecutionMint(spend, options.config);
+        executionArgv = replaceMirageMintArg(argv, executionMint);
+        logger.log(`displayMint=${spend.mint} executionMint=${executionMint}`);
+        logger.log(
+          `Planned spend ${spend.paylinkId}: amount=${spend.amount} displayMint=${spend.mint} executionMint=${executionMint} agentId=${spend.agentId}`
+        );
+      }
       logger.log(`Pending spend ${spend.paylinkId}: mirage ${executionArgv.join(" ")}`);
 
       if (options.config.dryRun) {
@@ -388,7 +397,7 @@ export const runAgentWorkerOnce = async (
       } catch (error) {
         mirageError = error instanceof Error ? error.message : String(error);
 
-        if (!isSolanaDevnetNativeFallbackEnabled(options.config)) {
+        if (!nativeFallbackEnabled) {
           throw error;
         }
 
@@ -400,7 +409,7 @@ export const runAgentWorkerOnce = async (
           throw new Error(`Mirage failed (${mirageError}) and SOLANA_EXECUTOR_SECRET_KEY_JSON is required for fallback.`);
         }
 
-        logger.log(`Mirage failed for ${spend.paylinkId}; trying Solana devnet native fallback: ${mirageError}`);
+        logger.log("trying Solana devnet native fallback");
         const fallback = await options.executeSolanaDevnetNative({
           paylinkId: spend.paylinkId,
           agentId: spend.agentId,
@@ -411,6 +420,7 @@ export const runAgentWorkerOnce = async (
         });
         txSignature = fallback.txSignature;
         result.executed += 1;
+        logger.log("native fallback tx confirmed");
       }
 
       if (!txSignature) {
@@ -418,7 +428,7 @@ export const runAgentWorkerOnce = async (
       }
 
       const fallbackMetadata =
-        mirageError && isSolanaDevnetNativeFallbackEnabled(options.config)
+        mirageError && nativeFallbackEnabled
           ? {
               executor: "solana-devnet-native-fallback",
               executionRail: "solana-devnet-native-fallback",

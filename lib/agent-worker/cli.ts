@@ -98,14 +98,19 @@ export const runAgentWorkerCliIteration = async (
 ): Promise<AgentWorkerRunResult> => {
   const config = options.config ?? parseAgentWorkerConfig(options.env, options.argv);
   const mirageExecutable = resolveExecutable("mirage");
+  const nativeFallbackEnabled = config.executionFallbackMode?.trim() === "solana-devnet-native";
 
-  logger.log("WORKER_BUILD_MARKER=native-fallback-v1");
+  logger.log("WORKER_BUILD_MARKER=native-fallback-v2");
   logger.log(config.dryRun ? "WhisperVault Agent Worker dry-run" : "WhisperVault Agent Worker");
   logger.log(`Control plane: ${config.baseUrl}`);
   logger.log(`Mirage executable: ${mirageExecutable ?? "not found on PATH"}`);
   logger.log(`Mirage execution enabled: ${config.executionEnabled ? "true" : "false"}`);
   logger.log(`Execution fallback mode: ${config.executionFallbackMode || "disabled"}`);
-  logger.log(`Mirage execution mint: ${config.mirageExecutionMint || "USDC"}`);
+  logger.log(
+    nativeFallbackEnabled
+      ? "Mirage execution mint: ignored for native fallback"
+      : `Mirage execution mint: ${config.mirageExecutionMint || "USDC"}`
+  );
   logger.log(
     config.telegramBotToken
       ? "Telegram notification: configured"

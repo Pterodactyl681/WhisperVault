@@ -299,9 +299,13 @@ const runAgentWorkerCheck = async (options = {}) => {
     await fetchEndpoint(endpoint, workerSecret, env, fetchFn, log, warn);
   }
 
-  const mintExitCode = validateMirageExecutionMintIfSet(env, pass, fail);
-  if (mintExitCode !== 0) {
-    exitCode = mintExitCode;
+  if (fallbackMode === "solana-devnet-native") {
+    log("MIRAGE_EXECUTION_MINT is ignored when EXECUTION_FALLBACK_MODE=solana-devnet-native.");
+  } else {
+    const mintExitCode = validateMirageExecutionMintIfSet(env, pass, fail);
+    if (mintExitCode !== 0) {
+      exitCode = mintExitCode;
+    }
   }
 
   const fallbackExitCode = await runSolanaFallbackCheck(env, options.solanaConnectionFactory, pass, warn, fail);

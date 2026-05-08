@@ -1,28 +1,21 @@
-﻿Upload these files to GitHub preserving the same paths.
+Upload these files to GitHub preserving the same paths.
 
-Feature: Ghost Allowance / Rolling Agent Tab
+Changed/added files:
+Dockerfile.worker
+package.json
+package-lock.json
+lib/agent-worker/cli.ts
+lib/agent-worker/runner.ts
+lib/agent-worker/solana-devnet-native.ts
+scripts/agent-worker-check.js
+tests/agent-worker-check.test.ts
+tests/agent-worker.test.ts
 
-New file:
-- migrations/0003_ghost_allowance.sql
+Important deletion if it still exists on GitHub:
+- Delete lib/agent-worker/solana-devnet-spl.ts.
 
-No files need to be deleted for this feature.
-
-Changed files:
-tsconfig.json
-lib/agent-budget/types.ts
-lib/agent-budget/service.ts
-lib/agent-budget/http.ts
-lib/agent-budget/database-repository.ts
-lib/agent-plan/http.ts
-lib/agent-plan/receipt.ts
-lib/telegram/commands.ts
-lib/whisperpay-server/types.ts
-lib/whisperpay-server/service.ts
-migrations/0003_ghost_allowance.sql
-scripts/demo-agent-vault-common.ts
-tests/agent-budget-service.test.ts
-tests/agent-budget-api.test.ts
-tests/agent-plan-api.test.ts
-tests/agent-payment-lifecycle.test.ts
-tests/telegram-command-service.test.ts
-tests/storage-adapter.test.ts
+Native fallback v2 markers to verify after deploy:
+- WORKER_BUILD_MARKER=native-fallback-v2
+- WORKER_IMAGE_MARKER=native-fallback-v2
+- trying Solana devnet native fallback
+- native fallback tx confirmed
