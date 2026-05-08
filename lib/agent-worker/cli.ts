@@ -99,7 +99,7 @@ export const runAgentWorkerCliIteration = async (
   const config = options.config ?? parseAgentWorkerConfig(options.env, options.argv);
   const mirageExecutable = resolveExecutable("mirage");
 
-  logger.log("WORKER_BUILD_MARKER=fallback-mint-override-v3");
+  logger.log("WORKER_BUILD_MARKER=fallback-mint-override-v5");
   logger.log(config.dryRun ? "WhisperVault Agent Worker dry-run" : "WhisperVault Agent Worker");
   logger.log(`Control plane: ${config.baseUrl}`);
   logger.log(`Mirage executable: ${mirageExecutable ?? "not found on PATH"}`);

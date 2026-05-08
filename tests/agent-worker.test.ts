@@ -325,7 +325,7 @@ test("worker safe mode plans pending spends and exits 0", async () => {
   assert.equal(confirmCalls, 0);
   assert.equal(sentMessages.length, 0);
   assert.equal(errors.length, 0);
-  assert.ok(logs.includes("WORKER_BUILD_MARKER=fallback-mint-override-v3"));
+  assert.ok(logs.includes("WORKER_BUILD_MARKER=fallback-mint-override-v5"));
   assert.ok(logs.some((message) => message.includes("Safe mode skip")));
   assert.ok(logs.some((message) => message.includes("Worker result: fetched=1 planned=1 executed=0 confirmed=0")));
 });

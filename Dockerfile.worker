@@ -12,4 +12,4 @@ COPY . .
 
 RUN npx tsc -p tsconfig.agent-worker.json
 
-CMD ["node", ".agent-worker-dist/scripts/agent-worker-daemon.js"]
+CMD ["sh", "-c", "echo WORKER_IMAGE_MARKER=fallback-v5-latest-code && node .agent-worker-dist/scripts/agent-worker-daemon.js"]
