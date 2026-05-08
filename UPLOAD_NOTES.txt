@@ -14,8 +14,12 @@ tests/agent-worker.test.ts
 Important deletion if it still exists on GitHub:
 - Delete lib/agent-worker/solana-devnet-spl.ts.
 
-Native fallback v2 markers to verify after deploy:
-- WORKER_BUILD_MARKER=native-fallback-v2
-- WORKER_IMAGE_MARKER=native-fallback-v2
+Native fallback v4 markers to verify after deploy:
+- WORKER_BUILD_MARKER=native-fallback-v4
+- WORKER_IMAGE_MARKER=native-fallback-v4
 - trying Solana devnet native fallback
-- native fallback tx confirmed
+- native fallback tx confirmed: <signature>
+
+Regression covered:
+- If Mirage throws a broadcast failure and config misses fallback mode, the final skipped-spend path checks
+  process.env.EXECUTION_FALLBACK_MODE === "solana-devnet-native" before logging Skipped, then executes native fallback.

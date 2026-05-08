@@ -331,6 +331,54 @@ const resolveExecutionMint = (spend: PendingAgentSpendExecution, config: AgentWo
 const isSolanaDevnetNativeFallbackEnabled = (config: AgentWorkerConfig): boolean =>
   config.executionFallbackMode?.trim() === "solana-devnet-native";
 
+const isSolanaDevnetNativeFallbackEnvEnabled = (): boolean =>
+  process.env.EXECUTION_FALLBACK_MODE?.trim() === "solana-devnet-native";
+
+const buildNativeFallbackMetadata = (mirageError: string) => ({
+  executor: "solana-devnet-native-fallback",
+  executionRail: "solana-devnet-native-fallback",
+  mirageAttempted: true,
+  mirageError
+});
+
+const runSolanaDevnetNativeFallbackCompletion = async (
+  spend: PendingAgentSpendExecution,
+  mirageError: string,
+  options: RunAgentWorkerOnceOptions,
+  fetchFn: WorkerFetch,
+  logger: WorkerLogger,
+  result: AgentWorkerRunResult
+): Promise<void> => {
+  if (!options.executeSolanaDevnetNative) {
+    throw new Error(`Mirage failed (${mirageError}) and Solana devnet native fallback executor is not configured.`);
+  }
+
+  const secretKeyJson =
+    options.config.solanaExecutorSecretKeyJson?.trim() || process.env.SOLANA_EXECUTOR_SECRET_KEY_JSON?.trim();
+
+  if (!secretKeyJson) {
+    throw new Error(`Mirage failed (${mirageError}) and SOLANA_EXECUTOR_SECRET_KEY_JSON is required for fallback.`);
+  }
+
+  logger.log("trying Solana devnet native fallback");
+  const fallback = await options.executeSolanaDevnetNative({
+    paylinkId: spend.paylinkId,
+    agentId: spend.agentId,
+    recipient: spend.recipient,
+    displayAmount: spend.amount,
+    displayMint: formatMintLabel(spend.mint),
+    secretKeyJson
+  });
+  result.executed += 1;
+  logger.log(`native fallback tx confirmed: ${fallback.txSignature}`);
+
+  const fallbackMetadata = buildNativeFallbackMetadata(mirageError);
+  await confirmExecution(options.config.baseUrl, options.config.workerSecret, spend, fallback.txSignature, fetchFn, fallbackMetadata);
+  result.confirmed += 1;
+  logger.log(`Confirmed ${spend.paylinkId} with tx ${fallback.txSignature}`);
+  await notifyTelegramConfirmation(spend, fallback.txSignature, options.config, logger, options.telegramClient, fallbackMetadata);
+};
+
 export const runAgentWorkerOnce = async (
   options: RunAgentWorkerOnceOptions
 ): Promise<AgentWorkerRunResult> => {
@@ -346,11 +394,15 @@ export const runAgentWorkerOnce = async (
   };
 
   for (const spend of pending) {
+    let mirageErrorForNativeFallback: string | null = null;
+    let nativeFallbackAttempted = false;
+
     try {
       const argv = validateMirageTransferArgv(spend.mirage.argv, {
         agentWalletName: options.config.agentWalletName
       });
-      const nativeFallbackEnabled = isSolanaDevnetNativeFallbackEnabled(options.config);
+      const nativeFallbackEnabled =
+        isSolanaDevnetNativeFallbackEnabled(options.config) || isSolanaDevnetNativeFallbackEnvEnabled();
       let executionArgv = argv;
       result.planned += 1;
       if (nativeFallbackEnabled) {
@@ -396,31 +448,15 @@ export const runAgentWorkerOnce = async (
         }
       } catch (error) {
         mirageError = error instanceof Error ? error.message : String(error);
+        mirageErrorForNativeFallback = mirageError;
 
         if (!nativeFallbackEnabled) {
           throw error;
         }
 
-        if (!options.executeSolanaDevnetNative) {
-          throw new Error(`Mirage failed (${mirageError}) and Solana devnet native fallback executor is not configured.`);
-        }
-
-        if (!options.config.solanaExecutorSecretKeyJson?.trim()) {
-          throw new Error(`Mirage failed (${mirageError}) and SOLANA_EXECUTOR_SECRET_KEY_JSON is required for fallback.`);
-        }
-
-        logger.log("trying Solana devnet native fallback");
-        const fallback = await options.executeSolanaDevnetNative({
-          paylinkId: spend.paylinkId,
-          agentId: spend.agentId,
-          recipient: spend.recipient,
-          displayAmount: spend.amount,
-          displayMint: formatMintLabel(spend.mint),
-          secretKeyJson: options.config.solanaExecutorSecretKeyJson
-        });
-        txSignature = fallback.txSignature;
-        result.executed += 1;
-        logger.log("native fallback tx confirmed");
+        nativeFallbackAttempted = true;
+        await runSolanaDevnetNativeFallbackCompletion(spend, mirageError, options, fetchFn, logger, result);
+        continue;
       }
 
       if (!txSignature) {
@@ -429,12 +465,7 @@ export const runAgentWorkerOnce = async (
 
       const fallbackMetadata =
         mirageError && nativeFallbackEnabled
-          ? {
-              executor: "solana-devnet-native-fallback",
-              executionRail: "solana-devnet-native-fallback",
-              mirageAttempted: true,
-              mirageError
-            }
+          ? buildNativeFallbackMetadata(mirageError)
           : undefined;
 
       await confirmExecution(options.config.baseUrl, options.config.workerSecret, spend, txSignature, fetchFn, fallbackMetadata);
@@ -443,6 +474,29 @@ export const runAgentWorkerOnce = async (
       await notifyTelegramConfirmation(spend, txSignature, options.config, logger, options.telegramClient, fallbackMetadata);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (
+        !nativeFallbackAttempted &&
+        mirageErrorForNativeFallback &&
+        process.env.EXECUTION_FALLBACK_MODE === "solana-devnet-native"
+      ) {
+        try {
+          nativeFallbackAttempted = true;
+          await runSolanaDevnetNativeFallbackCompletion(
+            spend,
+            mirageErrorForNativeFallback,
+            options,
+            fetchFn,
+            logger,
+            result
+          );
+          continue;
+        } catch (fallbackError) {
+          const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+          result.errors.push(`${spend.paylinkId}: ${fallbackMessage}`);
+          logger.error(`Skipped ${spend.paylinkId}: ${fallbackMessage}`);
+          continue;
+        }
+      }
       result.errors.push(`${spend.paylinkId}: ${message}`);
       logger.error(`Skipped ${spend.paylinkId}: ${message}`);
     }

@@ -325,7 +325,7 @@ test("worker safe mode plans pending spends and exits 0", async () => {
   assert.equal(confirmCalls, 0);
   assert.equal(sentMessages.length, 0);
   assert.equal(errors.length, 0);
-  assert.ok(logs.includes("WORKER_BUILD_MARKER=native-fallback-v2"));
+  assert.ok(logs.includes("WORKER_BUILD_MARKER=native-fallback-v4"));
   assert.ok(logs.some((message) => message.includes("Safe mode skip")));
   assert.ok(logs.some((message) => message.includes("Worker result: fetched=1 planned=1 executed=0 confirmed=0")));
 });
@@ -769,7 +769,7 @@ test("worker Mirage failure triggers Solana devnet native fallback", async () =>
   assert.equal(paymentIntent?.metadata?.manualExecution?.mirageAttempted, true);
   assert.equal(paymentIntent?.metadata?.manualExecution?.mirageError, "Invalid param WrongSize");
   assert.ok(logs.includes("trying Solana devnet native fallback"));
-  assert.ok(logs.includes("native fallback tx confirmed"));
+  assert.ok(logs.includes(`native fallback tx confirmed: ${fallbackSignature}`));
   assert.ok(logs.some((message) => message.includes("displayMint=USDC nativeFallback=true")));
   assert.equal(logs.some((message) => message.includes("executionMint=")), false);
 });
@@ -824,6 +824,73 @@ test("worker fallback receipt sends Telegram fallback confirmation text", async 
       `Tx: ${fallbackSignature}`
     ].join("\n")
   );
+});
+
+test("worker outer skip path uses env native fallback after Mirage broadcast failure", async () => {
+  const { paylinkService, paylink } = await seedPendingAgentSpend();
+  const fallbackSignature = "8".repeat(88);
+  const previousMode = process.env.EXECUTION_FALLBACK_MODE;
+  const previousSecret = process.env.SOLANA_EXECUTOR_SECRET_KEY_JSON;
+  let fallbackCalls = 0;
+  const errors: string[] = [];
+  const logs: string[] = [];
+
+  process.env.EXECUTION_FALLBACK_MODE = "solana-devnet-native";
+  process.env.SOLANA_EXECUTOR_SECRET_KEY_JSON = "[1,2,3]";
+
+  try {
+    const result = await runAgentWorkerOnce({
+      config: {
+        baseUrl: "http://localhost",
+        agentWalletName: "agent-treasury",
+        dryRun: false,
+        executionEnabled: true
+      },
+      fetch: await createWorkerFetch(paylinkService),
+      executeMirage: async () => {
+        throw new Error("broadcast failed: custom program error");
+      },
+      executeSolanaDevnetNative: async (input) => {
+        fallbackCalls += 1;
+        assert.equal(input.paylinkId, paylink.id);
+        assert.equal(input.secretKeyJson, "[1,2,3]");
+        return { txSignature: fallbackSignature };
+      },
+      logger: {
+        log(message) {
+          logs.push(message);
+        },
+        error(message) {
+          errors.push(message);
+        }
+      }
+    });
+
+    const paymentIntent = await paylinkService.getPaymentIntentByPaylinkId(paylink.id);
+    assert.equal(result.executed, 1);
+    assert.equal(result.confirmed, 1);
+    assert.deepEqual(result.errors, []);
+    assert.equal(errors.length, 0);
+    assert.equal(fallbackCalls, 1);
+    assert.equal(paymentIntent?.txSignature, fallbackSignature);
+    assert.equal(paymentIntent?.metadata?.manualExecution?.executionRail, "solana-devnet-native-fallback");
+    assert.equal(paymentIntent?.metadata?.manualExecution?.mirageAttempted, true);
+    assert.equal(paymentIntent?.metadata?.manualExecution?.mirageError, "broadcast failed: custom program error");
+    assert.ok(logs.includes("trying Solana devnet native fallback"));
+    assert.ok(logs.includes(`native fallback tx confirmed: ${fallbackSignature}`));
+  } finally {
+    if (previousMode === undefined) {
+      delete process.env.EXECUTION_FALLBACK_MODE;
+    } else {
+      process.env.EXECUTION_FALLBACK_MODE = previousMode;
+    }
+
+    if (previousSecret === undefined) {
+      delete process.env.SOLANA_EXECUTOR_SECRET_KEY_JSON;
+    } else {
+      process.env.SOLANA_EXECUTOR_SECRET_KEY_JSON = previousSecret;
+    }
+  }
 });
 
 test("Telegram send failure does not undo receipt confirmation", async () => {
@@ -969,6 +1036,7 @@ test("Solana devnet native fallback source stays native-only", async () => {
 
   assert.doesNotMatch(source, /@solana\/spl-token|associated token|createAssociatedToken|executionMint/);
   assert.match(source, /SystemProgram\.transfer/);
+  assert.match(source, /DEVNET_RPC_URL = "https:\/\/api\.devnet\.solana\.com"/);
   assert.match(source, /FALLBACK_LAMPORTS = 5_000/);
   assert.match(source, /"native-fallback"/);
 });

@@ -1,5 +1,4 @@
 import {
-  clusterApiUrl,
   Connection,
   Keypair,
   PublicKey,
@@ -11,6 +10,7 @@ import {
 import type { SolanaDevnetNativeTransferInput, SolanaDevnetNativeTransferResult } from "./runner";
 
 const DEFAULT_COMMITMENT = "confirmed";
+const DEVNET_RPC_URL = "https://api.devnet.solana.com";
 const FALLBACK_LAMPORTS = 5_000;
 const MEMO_PROGRAM_ID = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
 
@@ -41,7 +41,7 @@ const buildFallbackMemo = (input: SolanaDevnetNativeTransferInput): string =>
   ].join(":");
 
 export const createSolanaDevnetNativeExecutor = (
-  rpcUrl: string = process.env.SOLANA_RPC_URL?.trim() || clusterApiUrl("devnet")
+  rpcUrl: string = DEVNET_RPC_URL
 ) => {
   const connection = new Connection(rpcUrl, DEFAULT_COMMITMENT);
 
