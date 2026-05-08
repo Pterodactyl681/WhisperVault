@@ -114,9 +114,9 @@ npm run agent:worker:daemon
 
 `npm run agent:worker:check` prints readiness status, the control-plane endpoint, Node version, Mirage executable path, Telegram readiness, and Mirage wallet-address lookup readiness without printing secret values or Mirage command output. It fails for missing `WHISPERVAULT_BASE_URL`, missing `WHISPERVAULT_WORKER_SECRET`, `MIRAGE_EXECUTION_ENABLED=true` with no `mirage` executable on `PATH`, or `MIRAGE_EXECUTION_ENABLED=true` when `mirage address --wallet <AGENT_WALLET_NAME>` cannot resolve the worker wallet.
 
-## Hackathon fallback mode while Mirage SPL transfer issue is isolated
+## Hackathon native fallback mode while Mirage SPL transfer issue is isolated
 
-Use this mode only on the Railway worker execution service while Mirage devnet SPL transfers are being isolated. The browser, Next.js API routes, and Telegram webhook must not execute transfers. They only create pending spends and accept worker confirmations.
+Use this mode only on the Railway worker execution service while Mirage devnet SPL transfer behavior is being isolated. The browser, Next.js API routes, and Telegram webhook must not execute transfers. They only create pending spends and accept worker confirmations.
 
 Keep the user-facing token label as `USDC` in Telegram, UI, and receipts. The worker still validates and logs the Mirage transfer command from the pending spend, but when `MIRAGE_EXECUTION_MINT` is set it replaces the actual Mirage `--mint` argument with the devnet mint address before execution.
 
@@ -125,7 +125,7 @@ Required Railway variables:
 ```txt
 MIRAGE_EXECUTION_ENABLED=true
 MIRAGE_EXECUTION_MINT=4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU
-EXECUTION_FALLBACK_MODE=solana-devnet-spl
+EXECUTION_FALLBACK_MODE=solana-devnet-native
 SOLANA_EXECUTOR_SECRET_KEY_JSON=<json array keypair>
 ```
 
@@ -133,14 +133,16 @@ Behavior:
 
 - The worker tries Mirage first.
 - If Mirage succeeds, confirmation remains a normal Mirage CLI confirmation.
-- If Mirage fails and `EXECUTION_FALLBACK_MODE=solana-devnet-spl`, the Railway worker sends a real Solana devnet SPL token transfer using the keypair in `SOLANA_EXECUTOR_SECRET_KEY_JSON`.
-- The fallback uses `MIRAGE_EXECUTION_MINT` as the SPL mint, treats devnet USDC as 6 decimals, creates the recipient ATA when missing, confirms the transaction, and posts the tx signature back to the control plane.
-- The receipt metadata includes `executionRail=solana-devnet-spl-fallback`, `mirageAttempted=true`, and `mirageError=<error message>`.
+- If Mirage fails and `EXECUTION_FALLBACK_MODE=solana-devnet-native`, the Railway worker sends a real Solana devnet native SOL transfer using only `@solana/web3.js` and the keypair in `SOLANA_EXECUTOR_SECRET_KEY_JSON`.
+- The fallback transfers 5000 lamports to the spend recipient, adds memo `whispervault:fallback:<paylinkId>:<agentId>:<displayAmount>:<displayMint>`, confirms the transaction, and posts the tx signature back to the control plane.
+- This is a hackathon settlement-proof fallback while the Mirage SPL issue is isolated; it deliberately does not use token accounts, ATAs, or `@solana/spl-token`.
+- The receipt metadata includes `executionRail=solana-devnet-native-fallback`, `mirageAttempted=true`, and `mirageError=<error message>`.
 - Telegram confirmation for fallback says:
 
 ```txt
 Execution confirmed
-Rail: Solana devnet SPL fallback
+Rail: Solana devnet native fallback
+Display spend: <amount> USDC
 Mirage command: attempted
 Tx: <signature>
 ```
@@ -151,7 +153,7 @@ Before enabling the daemon, run:
 npm run agent:worker:check
 ```
 
-With fallback mode enabled, the check validates that `SOLANA_EXECUTOR_SECRET_KEY_JSON` parses as a Solana keypair, validates the executor has devnet SOL for fees, and checks the associated token account for `MIRAGE_EXECUTION_MINT` or warns that it can be created.
+With fallback mode enabled, the check validates that `SOLANA_EXECUTOR_SECRET_KEY_JSON` parses as a Solana keypair and that the executor has devnet SOL greater than zero for fees and the fallback transfer.
 
 ## Worker Logs
 

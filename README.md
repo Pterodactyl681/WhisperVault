@@ -510,6 +510,19 @@ Expected worker behavior:
 - confirm receipt through `/api/agent-spend/confirm-manual`
 - send Telegram push if the spend came from Telegram
 
+Hackathon fallback while the Mirage SPL transfer issue is isolated:
+
+```powershell
+$env:MIRAGE_EXECUTION_ENABLED="true"
+$env:MIRAGE_EXECUTION_MINT="4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
+$env:EXECUTION_FALLBACK_MODE="solana-devnet-native"
+$env:SOLANA_EXECUTOR_SECRET_KEY_JSON="<json array keypair>"
+npm.cmd run agent:worker:check
+npm.cmd run agent:worker:daemon
+```
+
+The worker still attempts Mirage first. If Mirage fails, Railway sends a native Solana devnet SOL transfer with a WhisperVault memo as settlement proof, while UI, Telegram, and receipts keep the display spend as USDC. Browser, API, and webhook paths must not execute this fallback.
+
 ### 11. Verify Telegram push and receipt
 
 Expected Telegram push after successful worker confirmation:

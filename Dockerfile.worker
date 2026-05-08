@@ -3,7 +3,7 @@ FROM node:22-bookworm-slim
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm install
+RUN npm ci
 
 RUN npm install -g @magicblock-labs/mirage --include=optional \
   || echo "Mirage CLI install failed; agent:worker:check will report PATH status at runtime."
@@ -12,4 +12,4 @@ COPY . .
 
 RUN npx tsc -p tsconfig.agent-worker.json
 
-CMD ["sh", "-c", "echo WORKER_IMAGE_MARKER=fallback-v5-latest-code && node .agent-worker-dist/scripts/agent-worker-daemon.js"]
+CMD ["sh", "-c", "echo WORKER_IMAGE_MARKER=native-fallback-v1 && node .agent-worker-dist/scripts/agent-worker-daemon.js"]

@@ -29,29 +29,31 @@ export interface MirageExecutionResult {
   stderr: string;
 }
 
-export interface SolanaDevnetSplTransferInput {
-  mint: string;
+export interface SolanaDevnetNativeTransferInput {
+  paylinkId: string;
+  agentId: string;
   recipient: string;
-  amount: string;
+  displayAmount: string;
+  displayMint: string;
   secretKeyJson: string;
 }
 
-export interface SolanaDevnetSplTransferResult {
+export interface SolanaDevnetNativeTransferResult {
   txSignature: string;
 }
 
 export type WorkerFetch = typeof fetch;
 export type MirageExecutor = (argv: string[]) => Promise<MirageExecutionResult>;
-export type SolanaDevnetSplExecutor = (
-  input: SolanaDevnetSplTransferInput
-) => Promise<SolanaDevnetSplTransferResult>;
+export type SolanaDevnetNativeExecutor = (
+  input: SolanaDevnetNativeTransferInput
+) => Promise<SolanaDevnetNativeTransferResult>;
 export type WorkerLogger = Pick<Console, "log" | "error"> & Partial<Pick<Console, "warn">>;
 
 interface RunAgentWorkerOnceOptions {
   config: AgentWorkerConfig;
   fetch?: WorkerFetch;
   executeMirage?: MirageExecutor;
-  executeSolanaDevnetSpl?: SolanaDevnetSplExecutor;
+  executeSolanaDevnetNative?: SolanaDevnetNativeExecutor;
   telegramClient?: TelegramBotClient;
   logger?: WorkerLogger;
 }
@@ -244,10 +246,11 @@ const buildTelegramConfirmationMessage = (
     mirageAttempted?: boolean;
   }
 ): string => {
-  if (metadata?.executionRail === "solana-devnet-spl-fallback") {
+  if (metadata?.executionRail === "solana-devnet-native-fallback") {
     return [
       "Execution confirmed",
-      "Rail: Solana devnet SPL fallback",
+      "Rail: Solana devnet native fallback",
+      `Display spend: ${spend.amount} ${formatMintLabel(spend.mint)}`,
       `Mirage command: ${metadata.mirageAttempted ? "attempted" : "not attempted"}`,
       `Tx: ${txSignature}`
     ].join("\n");
@@ -325,8 +328,8 @@ const resolveExecutionMint = (spend: PendingAgentSpendExecution, config: AgentWo
   return executionMint.trim() || spend.mint;
 };
 
-const isSolanaDevnetSplFallbackEnabled = (config: AgentWorkerConfig): boolean =>
-  config.executionFallbackMode?.trim() === "solana-devnet-spl";
+const isSolanaDevnetNativeFallbackEnabled = (config: AgentWorkerConfig): boolean =>
+  config.executionFallbackMode?.trim() === "solana-devnet-native";
 
 export const runAgentWorkerOnce = async (
   options: RunAgentWorkerOnceOptions
@@ -385,27 +388,25 @@ export const runAgentWorkerOnce = async (
       } catch (error) {
         mirageError = error instanceof Error ? error.message : String(error);
 
-        if (!isSolanaDevnetSplFallbackEnabled(options.config)) {
+        if (!isSolanaDevnetNativeFallbackEnabled(options.config)) {
           throw error;
         }
 
-        if (!options.executeSolanaDevnetSpl) {
-          throw new Error(`Mirage failed (${mirageError}) and Solana devnet SPL fallback executor is not configured.`);
-        }
-
-        if (executionMint === spend.mint && !options.config.mirageExecutionMint?.trim() && !process.env.MIRAGE_EXECUTION_MINT) {
-          throw new Error(`Mirage failed (${mirageError}) and MIRAGE_EXECUTION_MINT is required for fallback.`);
+        if (!options.executeSolanaDevnetNative) {
+          throw new Error(`Mirage failed (${mirageError}) and Solana devnet native fallback executor is not configured.`);
         }
 
         if (!options.config.solanaExecutorSecretKeyJson?.trim()) {
           throw new Error(`Mirage failed (${mirageError}) and SOLANA_EXECUTOR_SECRET_KEY_JSON is required for fallback.`);
         }
 
-        logger.log(`Mirage failed for ${spend.paylinkId}; trying Solana devnet SPL fallback: ${mirageError}`);
-        const fallback = await options.executeSolanaDevnetSpl({
-          mint: executionMint,
+        logger.log(`Mirage failed for ${spend.paylinkId}; trying Solana devnet native fallback: ${mirageError}`);
+        const fallback = await options.executeSolanaDevnetNative({
+          paylinkId: spend.paylinkId,
+          agentId: spend.agentId,
           recipient: spend.recipient,
-          amount: spend.amount,
+          displayAmount: spend.amount,
+          displayMint: formatMintLabel(spend.mint),
           secretKeyJson: options.config.solanaExecutorSecretKeyJson
         });
         txSignature = fallback.txSignature;
@@ -417,10 +418,10 @@ export const runAgentWorkerOnce = async (
       }
 
       const fallbackMetadata =
-        mirageError && isSolanaDevnetSplFallbackEnabled(options.config)
+        mirageError && isSolanaDevnetNativeFallbackEnabled(options.config)
           ? {
-              executor: "solana-devnet-spl-fallback",
-              executionRail: "solana-devnet-spl-fallback",
+              executor: "solana-devnet-native-fallback",
+              executionRail: "solana-devnet-native-fallback",
               mirageAttempted: true,
               mirageError
             }

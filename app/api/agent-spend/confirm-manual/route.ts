@@ -27,8 +27,8 @@ const parseConfirmManualBody = (
     throw new Error("txSignature must look like a Solana signature.");
   }
 
-  if (executor !== "mirage-cli" && executor !== "solana-devnet-spl-fallback") {
-    throw new Error("executor must be mirage-cli or solana-devnet-spl-fallback.");
+  if (executor !== "mirage-cli" && executor !== "solana-devnet-native-fallback") {
+    throw new Error("executor must be mirage-cli or solana-devnet-native-fallback.");
   }
 
   return {
@@ -59,8 +59,8 @@ export const POST = async (request: Request): Promise<Response> => {
       receipt: {
         paymentStatus: "Confirmed",
         execution:
-          paymentIntent.metadata?.manualExecution?.executionRail === "solana-devnet-spl-fallback"
-            ? "Solana devnet SPL fallback"
+          paymentIntent.metadata?.manualExecution?.executionRail === "solana-devnet-native-fallback"
+            ? "Solana devnet native fallback"
             : "Mirage CLI",
         devnetTx: paymentIntent.txSignature,
         ...(paymentIntent.metadata?.manualExecution?.executionRail

@@ -4,7 +4,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { execFile } = require("node:child_process");
 const { clusterApiUrl, Connection, Keypair, PublicKey } = require("@solana/web3.js");
-const { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } = require("@solana/spl-token");
 
 const PENDING_EXECUTION_PATH = "/api/agent-spend/pending-execution";
 const WORKER_SECRET_HEADER = "x-whispervault-worker-secret";
@@ -157,43 +156,29 @@ const validateMirageExecutionMintIfSet = (env, pass, fail) => {
 const runSolanaFallbackCheck = async (env, connectionFactory, pass, warn, fail) => {
   const fallbackMode = readEnv(env, "EXECUTION_FALLBACK_MODE");
 
-  if (fallbackMode !== "solana-devnet-spl") {
+  if (fallbackMode !== "solana-devnet-native") {
     return 0;
   }
 
-  const mintValue = readEnv(env, "MIRAGE_EXECUTION_MINT");
   const secretKeyJson = readEnv(env, "SOLANA_EXECUTOR_SECRET_KEY_JSON");
   let exitCode = 0;
 
-  if (!mintValue) {
-    fail("MIRAGE_EXECUTION_MINT is required when EXECUTION_FALLBACK_MODE=solana-devnet-spl.");
+  if (!secretKeyJson) {
+    fail("SOLANA_EXECUTOR_SECRET_KEY_JSON is required when EXECUTION_FALLBACK_MODE=solana-devnet-native.");
     exitCode = 1;
   }
 
   if (!secretKeyJson) {
-    fail("SOLANA_EXECUTOR_SECRET_KEY_JSON is required when EXECUTION_FALLBACK_MODE=solana-devnet-spl.");
-    exitCode = 1;
-  }
-
-  if (!mintValue || !secretKeyJson) {
     return exitCode;
   }
 
   let executor;
-  let mint;
 
   try {
     executor = parseExecutorKeypair(secretKeyJson);
     pass(`SOLANA_EXECUTOR_SECRET_KEY_JSON parsed; executor public key ${executor.publicKey.toBase58()}.`);
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
-    return 1;
-  }
-
-  try {
-    mint = new PublicKey(mintValue);
-  } catch {
-    fail("MIRAGE_EXECUTION_MINT must be a valid Solana public key.");
     return 1;
   }
 
@@ -211,19 +196,6 @@ const runSolanaFallbackCheck = async (env, connectionFactory, pass, warn, fail) 
     }
   } catch (error) {
     warn(`Could not validate executor devnet SOL balance: ${error instanceof Error ? error.message : String(error)}`);
-  }
-
-  try {
-    const ata = getAssociatedTokenAddressSync(mint, executor.publicKey, false, TOKEN_PROGRAM_ID);
-    const accountInfo = await connection.getAccountInfo(ata, "confirmed");
-
-    if (accountInfo) {
-      pass(`Executor associated token account exists: ${ata.toBase58()}.`);
-    } else {
-      warn(`Executor associated token account is missing but can be created: ${ata.toBase58()}.`);
-    }
-  } catch (error) {
-    warn(`Could not validate executor associated token account: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   return exitCode;

@@ -1,0 +1,17 @@
+﻿Upload these files to GitHub preserving the same paths.
+
+Important deletion:
+- Delete lib/agent-worker/solana-devnet-spl.ts from GitHub. It was removed because fallback no longer uses SPL token/ATA logic.
+
+Changed/added files:
+.env.example
+Dockerfile.worker
+README.md
+app/api/agent-spend/confirm-manual/route.ts
+docs/railway-worker.md
+lib/agent-worker/cli.ts
+lib/agent-worker/runner.ts
+lib/agent-worker/solana-devnet-native.ts
+scripts/agent-worker-check.js
+tests/agent-worker-check.test.ts
+tests/agent-worker.test.ts

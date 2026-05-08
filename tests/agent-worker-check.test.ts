@@ -31,7 +31,6 @@ type WorkerCheckModule = {
     ) => void;
     solanaConnectionFactory?: () => {
       getBalance: (publicKey: PublicKey, commitment: string) => Promise<number>;
-      getAccountInfo: (publicKey: PublicKey, commitment: string) => Promise<unknown>;
     };
   }) => Promise<number>;
 };
@@ -357,18 +356,17 @@ test("worker check validates MIRAGE_EXECUTION_MINT when set", async () => {
   });
 });
 
-test("worker check validates Solana devnet SPL fallback keypair and SOL", async () => {
+test("worker check validates Solana devnet native fallback keypair and SOL", async () => {
   await withWorkerEndpoint(async (baseUrl) => {
     const keypair = Keypair.generate();
     let checkedBalanceFor = "";
-    let checkedAta = false;
     const result = await runCheckWithOptions(
       {
         WHISPERVAULT_BASE_URL: baseUrl,
         WHISPERVAULT_WORKER_SECRET: "worker-secret",
         TELEGRAM_BOT_TOKEN: "token",
         MIRAGE_EXECUTION_ENABLED: "false",
-        EXECUTION_FALLBACK_MODE: "solana-devnet-spl",
+        EXECUTION_FALLBACK_MODE: "solana-devnet-native",
         MIRAGE_EXECUTION_MINT: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
         SOLANA_EXECUTOR_SECRET_KEY_JSON: JSON.stringify(Array.from(keypair.secretKey)),
         PATH: emptyPath()
@@ -378,10 +376,6 @@ test("worker check validates Solana devnet SPL fallback keypair and SOL", async 
           async getBalance(publicKey) {
             checkedBalanceFor = publicKey.toBase58();
             return 1;
-          },
-          async getAccountInfo() {
-            checkedAta = true;
-            return {};
           }
         })
       }
@@ -390,10 +384,9 @@ test("worker check validates Solana devnet SPL fallback keypair and SOL", async 
 
     assert.equal(result.status, 0);
     assert.equal(checkedBalanceFor, keypair.publicKey.toBase58());
-    assert.equal(checkedAta, true);
     assert.match(combined, /SOLANA_EXECUTOR_SECRET_KEY_JSON parsed/);
     assert.match(combined, /Executor has devnet SOL/);
-    assert.match(combined, /Executor associated token account exists/);
+    assert.doesNotMatch(combined, /associated token account/);
   });
 });
 
@@ -404,7 +397,7 @@ test("worker check fails when fallback keypair JSON is invalid", async () => {
       WHISPERVAULT_WORKER_SECRET: "worker-secret",
       TELEGRAM_BOT_TOKEN: "token",
       MIRAGE_EXECUTION_ENABLED: "false",
-      EXECUTION_FALLBACK_MODE: "solana-devnet-spl",
+      EXECUTION_FALLBACK_MODE: "solana-devnet-native",
       MIRAGE_EXECUTION_MINT: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
       SOLANA_EXECUTOR_SECRET_KEY_JSON: "not json",
       PATH: emptyPath()

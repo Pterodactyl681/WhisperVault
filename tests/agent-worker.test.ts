@@ -325,7 +325,7 @@ test("worker safe mode plans pending spends and exits 0", async () => {
   assert.equal(confirmCalls, 0);
   assert.equal(sentMessages.length, 0);
   assert.equal(errors.length, 0);
-  assert.ok(logs.includes("WORKER_BUILD_MARKER=fallback-mint-override-v5"));
+  assert.ok(logs.includes("WORKER_BUILD_MARKER=native-fallback-v1"));
   assert.ok(logs.some((message) => message.includes("Safe mode skip")));
   assert.ok(logs.some((message) => message.includes("Worker result: fetched=1 planned=1 executed=0 confirmed=0")));
 });
@@ -687,7 +687,7 @@ test("worker uses Mirage execution mint override while UI mint remains USDC", as
   }
 });
 
-test("worker Mirage failure triggers Solana devnet SPL fallback", async () => {
+test("worker Mirage failure triggers Solana devnet native fallback", async () => {
   const { paylinkService, paylink } = await seedPendingAgentSpend();
   const fallbackSignature = "6".repeat(88);
   let fallbackCalls = 0;
@@ -702,7 +702,7 @@ test("worker Mirage failure triggers Solana devnet SPL fallback", async () => {
       executionEnabled: true,
       telegramBotToken: "test-token",
       mirageExecutionMint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
-      executionFallbackMode: "solana-devnet-spl",
+      executionFallbackMode: "solana-devnet-native",
       solanaExecutorSecretKeyJson: "[1,2,3]"
     },
     fetch: async (input, init) => {
@@ -731,10 +731,12 @@ test("worker Mirage failure triggers Solana devnet SPL fallback", async () => {
     executeMirage: async () => {
       throw new Error("Invalid param WrongSize");
     },
-    executeSolanaDevnetSpl: async (input) => {
+    executeSolanaDevnetNative: async (input) => {
       fallbackCalls += 1;
-      assert.equal(input.mint, "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
-      assert.equal(input.amount, "5");
+      assert.equal(input.paylinkId, paylink.id);
+      assert.equal(input.agentId, "coffee-agent");
+      assert.equal(input.displayAmount, "5");
+      assert.equal(input.displayMint, "USDC");
       assert.equal(input.recipient, DEFAULT_DEMO_AGENT_RECIPIENT);
       return { txSignature: fallbackSignature };
     },
@@ -752,12 +754,12 @@ test("worker Mirage failure triggers Solana devnet SPL fallback", async () => {
   const paymentIntent = await paylinkService.getPaymentIntentByPaylinkId(paylink.id);
   assert.equal(result.confirmed, 1);
   assert.equal(fallbackCalls, 1);
-  assert.equal(confirmBodies[0]?.executor, "solana-devnet-spl-fallback");
-  assert.equal(confirmBodies[0]?.executionRail, "solana-devnet-spl-fallback");
+  assert.equal(confirmBodies[0]?.executor, "solana-devnet-native-fallback");
+  assert.equal(confirmBodies[0]?.executionRail, "solana-devnet-native-fallback");
   assert.equal(confirmBodies[0]?.mirageAttempted, true);
   assert.equal(confirmBodies[0]?.mirageError, "Invalid param WrongSize");
   assert.equal(paymentIntent?.txSignature, fallbackSignature);
-  assert.equal(paymentIntent?.metadata?.manualExecution?.executionRail, "solana-devnet-spl-fallback");
+  assert.equal(paymentIntent?.metadata?.manualExecution?.executionRail, "solana-devnet-native-fallback");
   assert.equal(paymentIntent?.metadata?.manualExecution?.mirageAttempted, true);
   assert.equal(paymentIntent?.metadata?.manualExecution?.mirageError, "Invalid param WrongSize");
 });
@@ -781,14 +783,14 @@ test("worker fallback receipt sends Telegram fallback confirmation text", async 
       executionEnabled: true,
       telegramBotToken: "test-token",
       mirageExecutionMint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
-      executionFallbackMode: "solana-devnet-spl",
+      executionFallbackMode: "solana-devnet-native",
       solanaExecutorSecretKeyJson: "[1,2,3]"
     },
     fetch: await createWorkerFetch(paylinkService),
     executeMirage: async () => {
       throw new Error("AccountNotFound");
     },
-    executeSolanaDevnetSpl: async () => ({ txSignature: fallbackSignature }),
+    executeSolanaDevnetNative: async () => ({ txSignature: fallbackSignature }),
     telegramClient: {
       async sendMessage(chatId, text) {
         sentMessages.push({ chatId, text });
@@ -804,9 +806,13 @@ test("worker fallback receipt sends Telegram fallback confirmation text", async 
   assert.equal(sentMessages.length, 1);
   assert.equal(
     sentMessages[0]?.text,
-    ["Execution confirmed", "Rail: Solana devnet SPL fallback", "Mirage command: attempted", `Tx: ${fallbackSignature}`].join(
-      "\n"
-    )
+    [
+      "Execution confirmed",
+      "Rail: Solana devnet native fallback",
+      "Display spend: 5 USDC",
+      "Mirage command: attempted",
+      `Tx: ${fallbackSignature}`
+    ].join("\n")
   );
 });
 
@@ -942,7 +948,10 @@ test("browser API and webhook paths do not import execution helpers", async () =
   assert.equal(/node:child_process|child_process/.test(combined), false);
   assert.equal(/\bspawn\s*\(/.test(combined), false);
   assert.equal(/\bexec\s*\(/.test(combined), false);
-  assert.equal(/@solana\/spl-token|createSolanaDevnetSplExecutor|agent-worker\/solana-devnet-spl/.test(combined), false);
+  assert.equal(
+    /@solana\/spl-token|createSolanaDevnetNativeExecutor|agent-worker\/solana-devnet-native/.test(combined),
+    false
+  );
 });
 
 const run = async (): Promise<void> => {
