@@ -100,7 +100,7 @@ export const runAgentWorkerCliIteration = async (
   const mirageExecutable = resolveExecutable("mirage");
   const nativeFallbackEnabled = config.executionFallbackMode?.trim() === "solana-devnet-native";
 
-  logger.log("WORKER_BUILD_MARKER=native-fallback-v4");
+  logger.log("WORKER_BUILD_MARKER=native-fallback-v5");
   logger.log(config.dryRun ? "WhisperVault Agent Worker dry-run" : "WhisperVault Agent Worker");
   logger.log(`Control plane: ${config.baseUrl}`);
   logger.log(`Mirage executable: ${mirageExecutable ?? "not found on PATH"}`);

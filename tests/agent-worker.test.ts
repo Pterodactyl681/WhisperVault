@@ -325,7 +325,7 @@ test("worker safe mode plans pending spends and exits 0", async () => {
   assert.equal(confirmCalls, 0);
   assert.equal(sentMessages.length, 0);
   assert.equal(errors.length, 0);
-  assert.ok(logs.includes("WORKER_BUILD_MARKER=native-fallback-v4"));
+  assert.ok(logs.includes("WORKER_BUILD_MARKER=native-fallback-v5"));
   assert.ok(logs.some((message) => message.includes("Safe mode skip")));
   assert.ok(logs.some((message) => message.includes("Worker result: fetched=1 planned=1 executed=0 confirmed=0")));
 });
@@ -826,7 +826,7 @@ test("worker fallback receipt sends Telegram fallback confirmation text", async 
   );
 });
 
-test("worker outer skip path uses env native fallback after Mirage broadcast failure", async () => {
+test("worker final skipped branch uses env native fallback before logging Skipped", async () => {
   const { paylinkService, paylink } = await seedPendingAgentSpend();
   const fallbackSignature = "8".repeat(88);
   const previousMode = process.env.EXECUTION_FALLBACK_MODE;
@@ -847,9 +847,6 @@ test("worker outer skip path uses env native fallback after Mirage broadcast fai
         executionEnabled: true
       },
       fetch: await createWorkerFetch(paylinkService),
-      executeMirage: async () => {
-        throw new Error("broadcast failed: custom program error");
-      },
       executeSolanaDevnetNative: async (input) => {
         fallbackCalls += 1;
         assert.equal(input.paylinkId, paylink.id);
@@ -875,7 +872,8 @@ test("worker outer skip path uses env native fallback after Mirage broadcast fai
     assert.equal(paymentIntent?.txSignature, fallbackSignature);
     assert.equal(paymentIntent?.metadata?.manualExecution?.executionRail, "solana-devnet-native-fallback");
     assert.equal(paymentIntent?.metadata?.manualExecution?.mirageAttempted, true);
-    assert.equal(paymentIntent?.metadata?.manualExecution?.mirageError, "broadcast failed: custom program error");
+    assert.equal(paymentIntent?.metadata?.manualExecution?.mirageError, "Mirage executor is not configured.");
+    assert.ok(logs.includes("FALLBACK_DECISION mode=solana-devnet-native"));
     assert.ok(logs.includes("trying Solana devnet native fallback"));
     assert.ok(logs.includes(`native fallback tx confirmed: ${fallbackSignature}`));
   } finally {

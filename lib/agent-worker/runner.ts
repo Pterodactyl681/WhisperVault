@@ -360,7 +360,6 @@ const runSolanaDevnetNativeFallbackCompletion = async (
     throw new Error(`Mirage failed (${mirageError}) and SOLANA_EXECUTOR_SECRET_KEY_JSON is required for fallback.`);
   }
 
-  logger.log("trying Solana devnet native fallback");
   const fallback = await options.executeSolanaDevnetNative({
     paylinkId: spend.paylinkId,
     agentId: spend.agentId,
@@ -454,6 +453,7 @@ export const runAgentWorkerOnce = async (
           throw error;
         }
 
+        logger.log("trying Solana devnet native fallback");
         nativeFallbackAttempted = true;
         await runSolanaDevnetNativeFallbackCompletion(spend, mirageError, options, fetchFn, logger, result);
         continue;
@@ -474,16 +474,15 @@ export const runAgentWorkerOnce = async (
       await notifyTelegramConfirmation(spend, txSignature, options.config, logger, options.telegramClient, fallbackMetadata);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (
-        !nativeFallbackAttempted &&
-        mirageErrorForNativeFallback &&
-        process.env.EXECUTION_FALLBACK_MODE === "solana-devnet-native"
-      ) {
+      const fallbackMode = process.env.EXECUTION_FALLBACK_MODE;
+      logger.log(`FALLBACK_DECISION mode=${fallbackMode}`);
+      if (fallbackMode === "solana-devnet-native") {
         try {
+          logger.log("trying Solana devnet native fallback");
           nativeFallbackAttempted = true;
           await runSolanaDevnetNativeFallbackCompletion(
             spend,
-            mirageErrorForNativeFallback,
+            mirageErrorForNativeFallback ?? message,
             options,
             fetchFn,
             logger,
