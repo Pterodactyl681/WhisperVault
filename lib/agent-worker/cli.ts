@@ -11,10 +11,12 @@ import {
   type AgentWorkerRunResult,
   type MirageExecutor,
   type SolanaDevnetNativeExecutor,
+  type SolanaDevnetSplExecutor,
   type WorkerFetch,
   type WorkerLogger
 } from "./runner";
 import { createSolanaDevnetNativeExecutor } from "./solana-devnet-native";
+import { createSolanaDevnetSplExecutor } from "./solana-devnet-spl";
 
 const execFileAsync = promisify(execFile);
 
@@ -88,6 +90,7 @@ interface RunAgentWorkerCliOptions {
   env?: NodeJS.ProcessEnv;
   executeMirage?: MirageExecutor;
   executeSolanaDevnetNative?: SolanaDevnetNativeExecutor;
+  executeSolanaDevnetSpl?: SolanaDevnetSplExecutor;
   fetch?: WorkerFetch;
   telegramClient?: TelegramBotClient;
 }
@@ -100,7 +103,7 @@ export const runAgentWorkerCliIteration = async (
   const mirageExecutable = resolveExecutable("mirage");
   const nativeFallbackEnabled = config.executionFallbackMode?.trim() === "solana-devnet-native";
 
-  logger.log("WORKER_BUILD_MARKER=native-fallback-v5");
+  logger.log("WORKER_BUILD_MARKER=native-fallback-v1");
   logger.log(config.dryRun ? "WhisperVault Agent Worker dry-run" : "WhisperVault Agent Worker");
   logger.log(`Control plane: ${config.baseUrl}`);
   logger.log(`Mirage executable: ${mirageExecutable ?? "not found on PATH"}`);
@@ -125,6 +128,7 @@ export const runAgentWorkerCliIteration = async (
     config,
     executeMirage: options.executeMirage ?? executeMirage,
     executeSolanaDevnetNative: options.executeSolanaDevnetNative ?? createSolanaDevnetNativeExecutor(),
+    executeSolanaDevnetSpl: options.executeSolanaDevnetSpl ?? createSolanaDevnetSplExecutor(),
     fetch: options.fetch,
     telegramClient: options.telegramClient,
     logger

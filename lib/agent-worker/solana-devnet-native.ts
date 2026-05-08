@@ -36,7 +36,7 @@ const buildFallbackMemo = (input: SolanaDevnetNativeTransferInput): string =>
     "native-fallback",
     input.paylinkId,
     input.agentId,
-    input.displayAmount,
+    input.amount,
     input.displayMint
   ].join(":");
 

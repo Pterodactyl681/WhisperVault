@@ -325,7 +325,7 @@ test("worker safe mode plans pending spends and exits 0", async () => {
   assert.equal(confirmCalls, 0);
   assert.equal(sentMessages.length, 0);
   assert.equal(errors.length, 0);
-  assert.ok(logs.includes("WORKER_BUILD_MARKER=native-fallback-v5"));
+  assert.ok(logs.includes("WORKER_BUILD_MARKER=native-fallback-v1"));
   assert.ok(logs.some((message) => message.includes("Safe mode skip")));
   assert.ok(logs.some((message) => message.includes("Worker result: fetched=1 planned=1 executed=0 confirmed=0")));
 });
@@ -738,7 +738,7 @@ test("worker Mirage failure triggers Solana devnet native fallback", async () =>
       fallbackCalls += 1;
       assert.equal(input.paylinkId, paylink.id);
       assert.equal(input.agentId, "coffee-agent");
-      assert.equal(input.displayAmount, "5");
+      assert.equal(input.amount, "5");
       assert.equal(input.displayMint, "USDC");
       assert.equal(input.recipient, DEFAULT_DEMO_AGENT_RECIPIENT);
       return { txSignature: fallbackSignature };
@@ -772,6 +772,77 @@ test("worker Mirage failure triggers Solana devnet native fallback", async () =>
   assert.ok(logs.includes(`native fallback tx confirmed: ${fallbackSignature}`));
   assert.ok(logs.some((message) => message.includes("displayMint=USDC nativeFallback=true")));
   assert.equal(logs.some((message) => message.includes("executionMint=")), false);
+});
+
+test("worker Mirage failure triggers Solana devnet SPL fallback", async () => {
+  const { paylinkService, paylink } = await seedPendingAgentSpend();
+  const fallbackSignature = "8".repeat(88);
+  let fallbackCalls = 0;
+  const confirmBodies: JsonRecord[] = [];
+  const logs: string[] = [];
+
+  const result = await runAgentWorkerOnce({
+    config: {
+      baseUrl: "http://localhost",
+      agentWalletName: "agent-treasury",
+      dryRun: false,
+      executionEnabled: true,
+      mirageExecutionMint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+      executionFallbackMode: "solana-devnet-spl",
+      solanaExecutorSecretKeyJson: "[1,2,3]"
+    },
+    fetch: async (input, init) => {
+      const url = String(input);
+
+      if (url.endsWith("/api/agent-spend/pending-execution")) {
+        return Response.json({ pending: await listPendingAgentSpendExecutions({ paylinkService }) });
+      }
+
+      if (url.endsWith("/api/agent-spend/confirm-manual")) {
+        const body = JSON.parse(String(init?.body ?? "{}")) as JsonRecord;
+        confirmBodies.push(body);
+        await paylinkService.confirmManualAgentSpend({
+          paylinkId: String(body.paylinkId ?? ""),
+          txSignature: String(body.txSignature ?? ""),
+          executor: String(body.executor ?? ""),
+          executionRail: String(body.executionRail ?? ""),
+          mirageAttempted: body.mirageAttempted === true,
+          mirageError: String(body.mirageError ?? "")
+        });
+        return Response.json({});
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    },
+    executeMirage: async () => {
+      throw new Error("Invalid param WrongSize");
+    },
+    executeSolanaDevnetSpl: async (input) => {
+      fallbackCalls += 1;
+      assert.equal(input.amount, "5");
+      assert.equal(input.mint, "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
+      assert.equal(input.recipient, DEFAULT_DEMO_AGENT_RECIPIENT);
+      assert.equal(input.secretKeyJson, "[1,2,3]");
+      return { txSignature: fallbackSignature };
+    },
+    logger: {
+      log(message) {
+        logs.push(message);
+      },
+      error() {}
+    }
+  });
+
+  const paymentIntent = await paylinkService.getPaymentIntentByPaylinkId(paylink.id);
+  assert.equal(result.confirmed, 1);
+  assert.equal(fallbackCalls, 1);
+  assert.equal(confirmBodies[0]?.executor, "solana-devnet-spl-fallback");
+  assert.equal(confirmBodies[0]?.executionRail, "solana-devnet-spl-fallback");
+  assert.equal(confirmBodies[0]?.mirageAttempted, true);
+  assert.equal(confirmBodies[0]?.mirageError, "Invalid param WrongSize");
+  assert.equal(paymentIntent?.txSignature, fallbackSignature);
+  assert.equal(paymentIntent?.metadata?.manualExecution?.executionRail, "solana-devnet-spl-fallback");
+  assert.ok(logs.includes("trying Solana devnet SPL fallback"));
 });
 
 test("worker fallback receipt sends Telegram fallback confirmation text", async () => {
@@ -824,71 +895,6 @@ test("worker fallback receipt sends Telegram fallback confirmation text", async 
       `Tx: ${fallbackSignature}`
     ].join("\n")
   );
-});
-
-test("worker final skipped branch uses env native fallback before logging Skipped", async () => {
-  const { paylinkService, paylink } = await seedPendingAgentSpend();
-  const fallbackSignature = "8".repeat(88);
-  const previousMode = process.env.EXECUTION_FALLBACK_MODE;
-  const previousSecret = process.env.SOLANA_EXECUTOR_SECRET_KEY_JSON;
-  let fallbackCalls = 0;
-  const errors: string[] = [];
-  const logs: string[] = [];
-
-  process.env.EXECUTION_FALLBACK_MODE = "solana-devnet-native";
-  process.env.SOLANA_EXECUTOR_SECRET_KEY_JSON = "[1,2,3]";
-
-  try {
-    const result = await runAgentWorkerOnce({
-      config: {
-        baseUrl: "http://localhost",
-        agentWalletName: "agent-treasury",
-        dryRun: false,
-        executionEnabled: true
-      },
-      fetch: await createWorkerFetch(paylinkService),
-      executeSolanaDevnetNative: async (input) => {
-        fallbackCalls += 1;
-        assert.equal(input.paylinkId, paylink.id);
-        assert.equal(input.secretKeyJson, "[1,2,3]");
-        return { txSignature: fallbackSignature };
-      },
-      logger: {
-        log(message) {
-          logs.push(message);
-        },
-        error(message) {
-          errors.push(message);
-        }
-      }
-    });
-
-    const paymentIntent = await paylinkService.getPaymentIntentByPaylinkId(paylink.id);
-    assert.equal(result.executed, 1);
-    assert.equal(result.confirmed, 1);
-    assert.deepEqual(result.errors, []);
-    assert.equal(errors.length, 0);
-    assert.equal(fallbackCalls, 1);
-    assert.equal(paymentIntent?.txSignature, fallbackSignature);
-    assert.equal(paymentIntent?.metadata?.manualExecution?.executionRail, "solana-devnet-native-fallback");
-    assert.equal(paymentIntent?.metadata?.manualExecution?.mirageAttempted, true);
-    assert.equal(paymentIntent?.metadata?.manualExecution?.mirageError, "Mirage executor is not configured.");
-    assert.ok(logs.includes("FALLBACK_DECISION mode=solana-devnet-native"));
-    assert.ok(logs.includes("trying Solana devnet native fallback"));
-    assert.ok(logs.includes(`native fallback tx confirmed: ${fallbackSignature}`));
-  } finally {
-    if (previousMode === undefined) {
-      delete process.env.EXECUTION_FALLBACK_MODE;
-    } else {
-      process.env.EXECUTION_FALLBACK_MODE = previousMode;
-    }
-
-    if (previousSecret === undefined) {
-      delete process.env.SOLANA_EXECUTOR_SECRET_KEY_JSON;
-    } else {
-      process.env.SOLANA_EXECUTOR_SECRET_KEY_JSON = previousSecret;
-    }
-  }
 });
 
 test("Telegram send failure does not undo receipt confirmation", async () => {

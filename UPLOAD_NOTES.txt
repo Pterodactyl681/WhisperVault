@@ -7,21 +7,10 @@ package-lock.json
 lib/agent-worker/cli.ts
 lib/agent-worker/runner.ts
 lib/agent-worker/solana-devnet-native.ts
-scripts/agent-worker-check.js
-tests/agent-worker-check.test.ts
+lib/agent-worker/solana-devnet-spl.ts
 tests/agent-worker.test.ts
 
-Important deletion if it still exists on GitHub:
-- Delete lib/agent-worker/solana-devnet-spl.ts.
-
-Native fallback v5 markers/logs to verify after deploy:
-- WORKER_BUILD_MARKER=native-fallback-v5
-- WORKER_IMAGE_MARKER=native-fallback-v5
-- FALLBACK_DECISION mode=solana-devnet-native
-- trying Solana devnet native fallback
-- native fallback tx confirmed: <signature>
-
-Critical branch patched:
-- The final branch that logs `Skipped ${spend.paylinkId}: ${message}` now logs FALLBACK_DECISION,
-  checks process.env.EXECUTION_FALLBACK_MODE === "solana-devnet-native", runs native fallback, then continues
-  before it can log Skipped.
+Behavior:
+- EXECUTION_FALLBACK_MODE=solana-devnet-spl keeps the SPL fallback path.
+- EXECUTION_FALLBACK_MODE=solana-devnet-native uses SystemProgram.transfer + Memo only.
+- Worker startup logs WORKER_BUILD_MARKER=native-fallback-v1.
