@@ -169,6 +169,14 @@ const createBudgetRecord = (): StoredAgentBudgetRecord => ({
     status: "active",
     rail: "magicblock-private",
     allowPublicFallback: false,
+    allowanceMode: "rolling",
+    liveAllowance: "10",
+    refillAmount: "5",
+    refillIntervalMinutes: 10,
+    maxLiveAllowance: "20",
+    lastRefillAt: "2026-04-25T10:00:00.000Z",
+    sessionEndsAt: null,
+    clawbackOnSessionEnd: true,
     metadata: {
       demo: false,
       category: "coffee"

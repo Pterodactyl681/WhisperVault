@@ -214,7 +214,14 @@ export class WhisperPayServerService {
       receipt: {
         type: "agent-private-receipt",
         memoReveal: "permissioned",
-        mode: "manual"
+        mode: "manual",
+        ...(input.budgetPolicySnapshot.allowanceMode
+          ? {
+              allowanceMode: input.budgetPolicySnapshot.allowanceMode,
+              ghostAllowanceBefore: input.budgetPolicySnapshot.ghostAllowanceBefore,
+              ghostAllowanceAfter: input.budgetPolicySnapshot.ghostAllowanceAfter
+            }
+          : {})
       },
       ...(input.telegram ? { source: "telegram" as const, telegram: clone(input.telegram) } : {}),
       ...(input.category ? { category: input.category } : {})

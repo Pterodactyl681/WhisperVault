@@ -2,6 +2,7 @@ export type AgentBudgetAmountInput = bigint | string;
 
 export type AgentBudgetStatus = "active" | "paused" | "exhausted";
 export type AgentBudgetRail = "magicblock-private" | "public-solana";
+export type AgentBudgetAllowanceMode = "static" | "rolling";
 export type AgentBudgetMetadata = Record<string, unknown>;
 
 export interface AgentBudget {
@@ -17,6 +18,14 @@ export interface AgentBudget {
   status: AgentBudgetStatus;
   rail: AgentBudgetRail;
   allowPublicFallback: boolean;
+  allowanceMode: AgentBudgetAllowanceMode;
+  liveAllowance: string;
+  refillAmount: string;
+  refillIntervalMinutes: number;
+  maxLiveAllowance: string;
+  lastRefillAt: string;
+  sessionEndsAt: string | null;
+  clawbackOnSessionEnd: boolean;
   metadata?: AgentBudgetMetadata;
 }
 
@@ -33,6 +42,14 @@ export interface CreateAgentBudgetInput {
   status?: AgentBudgetStatus;
   rail: AgentBudgetRail;
   allowPublicFallback?: boolean;
+  allowanceMode?: AgentBudgetAllowanceMode;
+  liveAllowance?: AgentBudgetAmountInput;
+  refillAmount?: AgentBudgetAmountInput;
+  refillIntervalMinutes?: number;
+  maxLiveAllowance?: AgentBudgetAmountInput;
+  lastRefillAt?: string;
+  sessionEndsAt?: string | null;
+  clawbackOnSessionEnd?: boolean;
   metadata?: AgentBudgetMetadata;
 }
 
@@ -51,6 +68,9 @@ export interface AgentBudgetSpendDecision {
   dailyCap: string;
   remainingDailyCap: string;
   reservedAmount: string;
+  allowanceMode: AgentBudgetAllowanceMode;
+  ghostAllowanceBefore: string;
+  ghostAllowanceAfter: string;
   budget: AgentBudget;
 }
 
@@ -60,6 +80,9 @@ export interface AgentBudgetReservationReceipt {
   reference: string;
   paylinkId: string | null;
   reservedAmount: string;
+  allowanceMode: AgentBudgetAllowanceMode;
+  ghostAllowanceBefore: string;
+  ghostAllowanceAfter: string;
   budget: AgentBudget;
 }
 

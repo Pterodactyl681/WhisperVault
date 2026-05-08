@@ -37,6 +37,7 @@
   ],
   "exclude": [
     "node_modules",
+    "github-upload-*",
     "github-upload-updated-files-20260507",
     "github-upload-updated-files-20260508-fallback",
     "railway-agent-worker-daemon-update-20260506",

@@ -28,6 +28,14 @@ interface AgentBudgetRow {
   status: AgentBudget["status"];
   rail: AgentBudget["rail"];
   allow_public_fallback: boolean;
+  allowance_mode?: AgentBudget["allowanceMode"] | null;
+  live_allowance?: string | null;
+  refill_amount?: string | null;
+  refill_interval_minutes?: number | null;
+  max_live_allowance?: string | null;
+  last_refill_at?: string | null;
+  session_ends_at?: string | null;
+  clawback_on_session_end?: boolean | null;
   metadata: AgentBudget["metadata"] | null;
 }
 
@@ -64,6 +72,14 @@ const toBudget = (row: AgentBudgetRow): AgentBudget => ({
   status: row.status,
   rail: row.rail,
   allowPublicFallback: row.allow_public_fallback,
+  allowanceMode: row.allowance_mode === "static" ? "static" : "rolling",
+  liveAllowance: row.live_allowance ?? "10",
+  refillAmount: row.refill_amount ?? "5",
+  refillIntervalMinutes: row.refill_interval_minutes ?? 10,
+  maxLiveAllowance: row.max_live_allowance ?? "20",
+  lastRefillAt: new Date(row.last_refill_at ?? row.last_reset_at).toISOString(),
+  sessionEndsAt: row.session_ends_at ? new Date(row.session_ends_at).toISOString() : null,
+  clawbackOnSessionEnd: row.clawback_on_session_end ?? true,
   ...(row.metadata ? { metadata: clone(row.metadata) } : {})
 });
 
@@ -80,6 +96,14 @@ const toBudgetRow = (budget: AgentBudget): AgentBudgetRow => ({
   status: budget.status,
   rail: budget.rail,
   allow_public_fallback: budget.allowPublicFallback,
+  allowance_mode: budget.allowanceMode,
+  live_allowance: budget.liveAllowance,
+  refill_amount: budget.refillAmount,
+  refill_interval_minutes: budget.refillIntervalMinutes,
+  max_live_allowance: budget.maxLiveAllowance,
+  last_refill_at: budget.lastRefillAt,
+  session_ends_at: budget.sessionEndsAt,
+  clawback_on_session_end: budget.clawbackOnSessionEnd,
   metadata: budget.metadata ? clone(budget.metadata) : null
 });
 

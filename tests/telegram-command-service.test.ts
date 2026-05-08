@@ -129,6 +129,9 @@ test("/vaults for linked user lists vaults", async () => {
   assert.match(reply, /Agent Vaults for/);
   assert.match(reply, /coffee-agent/);
   assert.match(reply, /Balance: 100\/100 USDC/);
+  assert.match(reply, /Ghost Allowance: 10\/20 USDC/);
+  assert.match(reply, /Refill: \+5 every 10 min/);
+  assert.match(reply, /Next refill:/);
   assert.match(reply, /Rail: magicblock-private \(fallback off\)/);
 });
 
@@ -142,10 +145,24 @@ test("/spend coffee linked uses approved path when budget allows", async () => {
   });
 
   assert.match(reply, /Spend Firewall: Passed/);
+  assert.match(reply, /Ghost Allowance: 10 → 5 USDC/);
   assert.match(reply, /Private spend: created/);
   assert.match(reply, /Execution: pending\/manual/);
   assert.match(reply, /Paylink\/Receipt id: pl_/);
   assert.equal((await paylinkService.listPaymentIntents()).length, 1);
+});
+
+test("/spend blocked by allowance explains Ghost Allowance", async () => {
+  const { service, telegramLinkService } = await createHarness();
+  await linkTelegramUser(telegramLinkService);
+
+  const reply = await service.handleTextCommand({
+    telegramUserId: "777",
+    text: "/spend 11 buy snacks"
+  });
+
+  assert.match(reply, /Spend Firewall: Blocked/);
+  assert.match(reply, /Reason: Requested spend exceeds live Ghost Allowance\./);
 });
 
 test("/spend from Telegram stores chat metadata on spend artifacts", async () => {

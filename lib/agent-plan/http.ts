@@ -158,6 +158,7 @@ export const createAgentPlanHttpHandlers = (options: AgentPlanHttpOptions): Agen
         }
 
         const decision = await budgetPolicy.canSpend(input.agentId, input.amount);
+        const syncedBudget = decision.budget;
 
         if (!decision.allowed) {
           const reason = decision.reason ?? "Spend rejected by policy.";
@@ -166,9 +167,12 @@ export const createAgentPlanHttpHandlers = (options: AgentPlanHttpOptions): Agen
             reason,
             remainingDailyCap: decision.remainingDailyCap,
             policy: {
-              dailyCapPercent: budget.dailyCapPercent,
-              spentToday: budget.spentToday,
-              currentBalance: budget.currentBalance
+              dailyCapPercent: syncedBudget.dailyCapPercent,
+              spentToday: syncedBudget.spentToday,
+              currentBalance: syncedBudget.currentBalance,
+              allowanceMode: decision.allowanceMode,
+              ghostAllowanceBefore: decision.ghostAllowanceBefore,
+              ghostAllowanceAfter: decision.ghostAllowanceAfter
             },
             receipt: buildRejectedPolicyReceipt({
               agentId: input.agentId,
@@ -177,10 +181,10 @@ export const createAgentPlanHttpHandlers = (options: AgentPlanHttpOptions): Agen
               amount: input.amount,
               mint: input.mint,
               reason,
-              dailyCapPercent: budget.dailyCapPercent,
+              dailyCapPercent: syncedBudget.dailyCapPercent,
               remainingDailyCap: decision.remainingDailyCap,
-              spentToday: budget.spentToday,
-              currentBalance: budget.currentBalance
+              spentToday: syncedBudget.spentToday,
+              currentBalance: syncedBudget.currentBalance
             })
           });
         }
@@ -196,12 +200,15 @@ export const createAgentPlanHttpHandlers = (options: AgentPlanHttpOptions): Agen
           rail: input.rail,
           allowPublicFallback: false,
           budgetPolicySnapshot: {
-            dailyCapPercent: budget.dailyCapPercent,
-            spentToday: budget.spentToday,
+            dailyCapPercent: syncedBudget.dailyCapPercent,
+            spentToday: syncedBudget.spentToday,
             remainingDailyCapBefore: decision.remainingDailyCap,
-            remainingDailyCapAfter
+            remainingDailyCapAfter,
+            allowanceMode: decision.allowanceMode,
+            ghostAllowanceBefore: decision.ghostAllowanceBefore,
+            ghostAllowanceAfter: decision.ghostAllowanceAfter
           },
-          fromWallet: budget.agentWallet ?? `agent:${input.agentId}`,
+          fromWallet: syncedBudget.agentWallet ?? `agent:${input.agentId}`,
           ...(input.telegram
             ? {
                 telegram: {
@@ -215,6 +222,7 @@ export const createAgentPlanHttpHandlers = (options: AgentPlanHttpOptions): Agen
         let reservedAmount = input.amount;
         let totalReservedAfter = input.amount;
         let reservationState = "reserved";
+        let ghostAllowanceAfter = decision.ghostAllowanceAfter;
 
         try {
           const reservationReceipt = await budgetPolicy.reserveSpend(input.agentId, input.amount, {
@@ -223,6 +231,7 @@ export const createAgentPlanHttpHandlers = (options: AgentPlanHttpOptions): Agen
           });
           reservedAmount = reservationReceipt.amount;
           totalReservedAfter = reservationReceipt.reservedAmount;
+          ghostAllowanceAfter = reservationReceipt.ghostAllowanceAfter;
           await paylinkService.recordAgentBudgetReserved(artifacts.paymentIntent.id);
           reservationState = artifacts.paymentIntent.metadata?.agentLifecycle?.budgetReservationState ?? "reserved";
         } catch (error) {
@@ -266,9 +275,12 @@ export const createAgentPlanHttpHandlers = (options: AgentPlanHttpOptions): Agen
           paylinkId: artifacts.paylink.id,
           paylinkUrl,
           rail: input.rail,
-          dailyCapPercent: budget.dailyCapPercent,
+          dailyCapPercent: syncedBudget.dailyCapPercent,
           remainingDailyCapBefore: decision.remainingDailyCap,
           remainingDailyCapAfter,
+          allowanceMode: decision.allowanceMode,
+          ghostAllowanceBefore: decision.ghostAllowanceBefore,
+          ghostAllowanceAfter,
           reservedAmount,
           totalReservedAfter,
           reservationState,
@@ -289,6 +301,9 @@ export const createAgentPlanHttpHandlers = (options: AgentPlanHttpOptions): Agen
             privacyMode: "private",
             allowPublicFallback: false,
             remainingDailyCap: remainingDailyCapAfter,
+            allowanceMode: decision.allowanceMode,
+            ghostAllowanceBefore: decision.ghostAllowanceBefore,
+            ghostAllowanceAfter,
             memoPreview,
             executionStatus: "Mirage command ready",
             executionInstruction: "Execution pending \u2014 run Mirage command manually",

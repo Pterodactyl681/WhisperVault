@@ -35,6 +35,17 @@ const withOwner = (owner: string, init?: RequestInit): RequestInit => ({
 
 const readJson = async (response: Response): Promise<unknown> => response.json();
 
+const defaultGhostAllowance = {
+  allowanceMode: "rolling",
+  liveAllowance: "10",
+  refillAmount: "5",
+  refillIntervalMinutes: 10,
+  maxLiveAllowance: "20",
+  lastRefillAt: "2026-04-25T10:00:00.000Z",
+  sessionEndsAt: null,
+  clawbackOnSessionEnd: true
+} as const;
+
 test("agent budget API supports create, list, read, check-spend, pause, and resume happy paths", async () => {
   const handlers = createHandlers();
 
@@ -65,7 +76,8 @@ test("agent budget API supports create, list, read, check-spend, pause, and resu
       lastResetAt: "2026-04-25T10:00:00.000Z",
       status: "active",
       rail: "magicblock-private",
-      allowPublicFallback: false
+      allowPublicFallback: false,
+      ...defaultGhostAllowance
     }
   });
 
@@ -87,7 +99,8 @@ test("agent budget API supports create, list, read, check-spend, pause, and resu
         lastResetAt: "2026-04-25T10:00:00.000Z",
         status: "active",
         rail: "magicblock-private",
-        allowPublicFallback: false
+        allowPublicFallback: false,
+        ...defaultGhostAllowance
       }
     ]
   });
@@ -103,7 +116,7 @@ test("agent budget API supports create, list, read, check-spend, pause, and resu
     new Request("http://localhost/api/agent-budgets/agent-alpha/check-spend", withOwner("owner-alpha", {
       method: "POST",
       body: JSON.stringify({
-        amount: "50",
+        amount: "5",
         mint: "usdc-mint",
         reason: "invoice"
       })
@@ -119,7 +132,7 @@ test("agent budget API supports create, list, read, check-spend, pause, and resu
     remainingDailyCap: "60",
     reason: null,
     request: {
-      amount: "50",
+      amount: "5",
       mint: "usdc-mint",
       reason: "invoice"
     },

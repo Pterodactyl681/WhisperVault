@@ -189,7 +189,7 @@ test("agent payment failure releases reserved spend", async () => {
 
   const updated = await paylinkService.updatePaymentIntentStatus(paymentIntent.id, "failed");
   const budget = await budgetService.getAgentBudget("coffee-agent");
-  const decision = await budgetService.canSpend("coffee-agent", "30");
+  const decision = await budgetService.canSpend("coffee-agent", "5");
 
   assert.equal(updated.status, "failed");
   assert.equal(updated.metadata?.agentLifecycle?.budgetReservationState, "released");

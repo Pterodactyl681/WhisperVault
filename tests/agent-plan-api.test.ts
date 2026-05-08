@@ -105,7 +105,10 @@ test("successful agent plan creates a private paylink and reserves budget", asyn
       decision: "approved",
       dailyCapPercent: 30,
       remainingDailyCapBefore: "30",
-      remainingDailyCapAfter: "25"
+      remainingDailyCapAfter: "25",
+      allowanceMode: "rolling",
+      ghostAllowanceBefore: "10",
+      ghostAllowanceAfter: "5"
     },
     reservation: {
       amountReserved: "5",
@@ -131,6 +134,9 @@ test("successful agent plan creates a private paylink and reserves budget", asyn
     }
   });
   assert.equal(body.executionStatus, "Mirage command ready");
+  assert.equal(body.allowanceMode, "rolling");
+  assert.equal(body.ghostAllowanceBefore, "10");
+  assert.equal(body.ghostAllowanceAfter, "5");
   assert.equal(body.executionInstruction, "Execution pending — run Mirage command manually");
   assert.equal(body.paymentStatus, "Payment status: Pending/manual");
   assert.deepEqual(body.mirage, {
@@ -205,7 +211,10 @@ test("rejected agent plan does not create a paylink and does not reserve budget"
     policy: {
       dailyCapPercent: 30,
       spentToday: "0",
-      currentBalance: "10"
+      currentBalance: "10",
+      allowanceMode: "rolling",
+      ghostAllowanceBefore: "10",
+      ghostAllowanceAfter: "10"
     },
     receipt: {
       type: "agent-policy-decision",
@@ -272,7 +281,10 @@ test("created paylink and payment intent include agent metadata", async () => {
       dailyCapPercent: 30,
       spentToday: "0",
       remainingDailyCapBefore: "30",
-      remainingDailyCapAfter: "25"
+      remainingDailyCapAfter: "25",
+      allowanceMode: "rolling",
+      ghostAllowanceBefore: "10",
+      ghostAllowanceAfter: "5"
     },
     memo: body.memoPreview,
     privateRail: {
@@ -288,7 +300,10 @@ test("created paylink and payment intent include agent metadata", async () => {
     receipt: {
       type: "agent-private-receipt",
       memoReveal: "permissioned",
-      mode: "manual"
+      mode: "manual",
+      allowanceMode: "rolling",
+      ghostAllowanceBefore: "10",
+      ghostAllowanceAfter: "5"
     }
   });
 
@@ -369,7 +384,10 @@ test("agent spend metadata is available to private memo reveal context", async (
     receipt: {
       type: "agent-private-receipt",
       memoReveal: "permissioned",
-      mode: "manual"
+      mode: "manual",
+      allowanceMode: "rolling",
+      ghostAllowanceBefore: "10",
+      ghostAllowanceAfter: "5"
     },
     reveal: {
       source: "magicblock-private-memo",
@@ -494,7 +512,7 @@ test("invalid recipient is rejected before artifacts are created", async () => {
   });
   assert.equal((await paylinkService.listPaylinks()).length, 0);
   assert.equal((await paylinkService.listPaymentIntents()).length, 0);
-  const body = (await budgetService.canSpend("coffee-agent", "30"));
+  const body = (await budgetService.canSpend("coffee-agent", "10"));
 
   assert.equal(body.allowed, true);
   assert.equal(body.reservedAmount, "0");

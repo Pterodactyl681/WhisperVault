@@ -69,6 +69,19 @@ const parseCreateInput = (body: Record<string, unknown>): CreateAgentBudgetInput
     body.status === "active" || body.status === "paused" || body.status === "exhausted" ? body.status : undefined,
   rail: body.rail === "magicblock-private" || body.rail === "public-solana" ? body.rail : ("magicblock-private" as const),
   allowPublicFallback: typeof body.allowPublicFallback === "boolean" ? body.allowPublicFallback : undefined,
+  allowanceMode: body.allowanceMode === "static" || body.allowanceMode === "rolling" ? body.allowanceMode : undefined,
+  liveAllowance:
+    typeof body.liveAllowance === "string" || typeof body.liveAllowance === "bigint" ? body.liveAllowance : undefined,
+  refillAmount:
+    typeof body.refillAmount === "string" || typeof body.refillAmount === "bigint" ? body.refillAmount : undefined,
+  refillIntervalMinutes: typeof body.refillIntervalMinutes === "number" ? body.refillIntervalMinutes : undefined,
+  maxLiveAllowance:
+    typeof body.maxLiveAllowance === "string" || typeof body.maxLiveAllowance === "bigint"
+      ? body.maxLiveAllowance
+      : undefined,
+  lastRefillAt: typeof body.lastRefillAt === "string" ? body.lastRefillAt : undefined,
+  sessionEndsAt: typeof body.sessionEndsAt === "string" || body.sessionEndsAt === null ? body.sessionEndsAt : undefined,
+  clawbackOnSessionEnd: typeof body.clawbackOnSessionEnd === "boolean" ? body.clawbackOnSessionEnd : undefined,
   metadata: isRecord(body.metadata) ? body.metadata : undefined
 });
 

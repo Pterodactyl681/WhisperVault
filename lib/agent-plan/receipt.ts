@@ -16,6 +16,9 @@ export interface AgentPrivateReceiptPreview {
     dailyCapPercent: number;
     remainingDailyCapBefore: string;
     remainingDailyCapAfter: string;
+    allowanceMode: "static" | "rolling";
+    ghostAllowanceBefore: string;
+    ghostAllowanceAfter: string;
   };
   reservation: {
     amountReserved: string;
@@ -82,6 +85,9 @@ interface BuildApprovedPrivateReceiptInput {
   memoPreview: string;
   paymentStatus: string;
   mirageReady: boolean;
+  allowanceMode: "static" | "rolling";
+  ghostAllowanceBefore: string;
+  ghostAllowanceAfter: string;
 }
 
 interface BuildRejectedPolicyReceiptInput {
@@ -114,7 +120,10 @@ export const buildApprovedPrivateReceiptPreview = (
     decision: "approved",
     dailyCapPercent: input.dailyCapPercent,
     remainingDailyCapBefore: input.remainingDailyCapBefore,
-    remainingDailyCapAfter: input.remainingDailyCapAfter
+    remainingDailyCapAfter: input.remainingDailyCapAfter,
+    allowanceMode: input.allowanceMode,
+    ghostAllowanceBefore: input.ghostAllowanceBefore,
+    ghostAllowanceAfter: input.ghostAllowanceAfter
   },
   reservation: {
     amountReserved: input.reservedAmount,

@@ -32,6 +32,9 @@ interface AgentPlanSuccessPayload {
   paylinkId: string;
   amount: string;
   mint: string;
+  allowanceMode?: "static" | "rolling";
+  ghostAllowanceBefore?: string;
+  ghostAllowanceAfter?: string;
   executionStatus?: string;
   paymentStatus?: string;
 }
@@ -82,6 +85,27 @@ const calculateDailyCap = (budget: AgentBudget): string => {
   const totalBudget = toBigInt(budget.totalBudget);
   const capBase = currentBalance < totalBudget ? currentBalance : totalBudget;
   return ((capBase * BigInt(budget.dailyCapPercent)) / 100n).toString();
+};
+
+const formatNextRefill = (budget: AgentBudget): string => {
+  if (budget.allowanceMode !== "rolling") {
+    return "off";
+  }
+
+  if (BigInt(budget.liveAllowance) >= BigInt(budget.maxLiveAllowance)) {
+    return "ready";
+  }
+
+  const intervalMs = budget.refillIntervalMinutes * 60 * 1000;
+  const nextRefillAt = Date.parse(budget.lastRefillAt) + intervalMs;
+  const remainingMs = nextRefillAt - Date.now();
+
+  if (remainingMs <= 0) {
+    return "now";
+  }
+
+  const remainingMinutes = Math.ceil(remainingMs / 60_000);
+  return remainingMinutes === 1 ? "in 1 min" : `in ${remainingMinutes} min`;
 };
 
 const parseSpendShortcut = (command: ParsedTelegramCommand): ParsedSpendCommand | null => {
@@ -238,13 +262,17 @@ export class TelegramCommandService {
     const lines = await Promise.all(
       budgets.map(async (budget) => {
         const decision = await this.budgetPolicy.canSpend(budget.agentId, "1");
-        const balance = `${budget.currentBalance}/${budget.totalBudget} ${formatMintLabel(budget.mint)}`;
+        const syncedBudget = decision.budget;
+        const balance = `${syncedBudget.currentBalance}/${syncedBudget.totalBudget} ${formatMintLabel(syncedBudget.mint)}`;
         return [
-          `- ${budget.agentId}`,
+          `- ${syncedBudget.agentId}`,
           `  Balance: ${balance}`,
-          `  Daily cap: ${calculateDailyCap(budget)} ${formatMintLabel(budget.mint)}`,
-          `  Daily left: ${decision.remainingDailyCap} ${formatMintLabel(budget.mint)}`,
-          `  Rail: ${formatRail(budget)}`
+          `  Daily cap: ${calculateDailyCap(syncedBudget)} ${formatMintLabel(syncedBudget.mint)}`,
+          `  Daily left: ${decision.remainingDailyCap} ${formatMintLabel(syncedBudget.mint)}`,
+          `  Ghost Allowance: ${syncedBudget.liveAllowance}/${syncedBudget.maxLiveAllowance} ${formatMintLabel(syncedBudget.mint)}`,
+          `  Refill: +${syncedBudget.refillAmount} every ${syncedBudget.refillIntervalMinutes} min`,
+          `  Next refill: ${formatNextRefill(syncedBudget)}`,
+          `  Rail: ${formatRail(syncedBudget)}`
         ].join("\n");
       })
     );
@@ -335,6 +363,9 @@ export class TelegramCommandService {
       "Spend Firewall: Passed",
       `Agent: ${selectedVault.agentId}`,
       `Amount: ${formatTokenAmount(payload.amount, payload.mint)}`,
+      ...(payload.allowanceMode === "rolling" && payload.ghostAllowanceBefore && payload.ghostAllowanceAfter
+        ? [`Ghost Allowance: ${payload.ghostAllowanceBefore} → ${payload.ghostAllowanceAfter} ${formatMintLabel(payload.mint)}`]
+        : []),
       "Private spend: created",
       "Mirage command: ready",
       "Execution: pending/manual",

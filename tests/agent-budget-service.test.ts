@@ -42,6 +42,14 @@ test("createAgentBudget stores defaults and returns the created budget", async (
     status: "active",
     rail: "magicblock-private",
     allowPublicFallback: false,
+    allowanceMode: "rolling",
+    liveAllowance: "10",
+    refillAmount: "5",
+    refillIntervalMinutes: 10,
+    maxLiveAllowance: "20",
+    lastRefillAt: "2026-04-25T10:00:00.000Z",
+    sessionEndsAt: null,
+    clawbackOnSessionEnd: true,
     metadata: {
       tier: "mvp"
     }
@@ -62,6 +70,7 @@ test("reserve and confirm allow spends under the safer daily cap", async () => {
     mint: "usdc-mint",
     totalBudget: "1000",
     currentBalance: "200",
+    allowanceMode: "static",
     rail: "public-solana"
   });
 
@@ -100,6 +109,7 @@ test("rejects spends that exceed the remaining daily cap", async () => {
     mint: "usdc-mint",
     totalBudget: "1000",
     currentBalance: "200",
+    allowanceMode: "static",
     rail: "magicblock-private"
   });
 
@@ -182,6 +192,7 @@ test("handles integer-safe amounts beyond Number.MAX_SAFE_INTEGER", async () => 
     mint: "usdc-mint",
     totalBudget: "900719925474099312345",
     currentBalance: "900719925474099312345",
+    allowanceMode: "static",
     rail: "magicblock-private"
   });
 
@@ -195,6 +206,135 @@ test("handles integer-safe amounts beyond Number.MAX_SAFE_INTEGER", async () => 
   const confirmation = await service.confirmSpend("agent-whale", "100000000000000000", "pay_whale");
   assert.equal(confirmation.budget.currentBalance, "900619925474099312345");
   assert.equal(confirmation.budget.spentToday, "100000000000000000");
+});
+
+test("lazy refill increases liveAllowance", async () => {
+  const service = new AgentBudgetService({
+    now: fixedClock("2026-04-25T10:25:00.000Z")
+  });
+
+  await service.createAgentBudget({
+    agentId: "agent-refill",
+    owner: "owner-wallet",
+    mint: "usdc-mint",
+    totalBudget: "100",
+    liveAllowance: "5",
+    refillAmount: "5",
+    refillIntervalMinutes: 10,
+    maxLiveAllowance: "20",
+    lastRefillAt: "2026-04-25T10:00:00.000Z",
+    rail: "magicblock-private"
+  });
+
+  const decision = await service.canSpend("agent-refill", "1");
+  assert.equal(decision.budget.liveAllowance, "15");
+  assert.equal(decision.budget.lastRefillAt, "2026-04-25T10:20:00.000Z");
+});
+
+test("liveAllowance caps at maxLiveAllowance", async () => {
+  const service = new AgentBudgetService({
+    now: fixedClock("2026-04-25T11:00:00.000Z")
+  });
+
+  await service.createAgentBudget({
+    agentId: "agent-cap",
+    owner: "owner-wallet",
+    mint: "usdc-mint",
+    totalBudget: "100",
+    liveAllowance: "18",
+    refillAmount: "5",
+    refillIntervalMinutes: 10,
+    maxLiveAllowance: "20",
+    lastRefillAt: "2026-04-25T10:00:00.000Z",
+    rail: "magicblock-private"
+  });
+
+  const decision = await service.canSpend("agent-cap", "1");
+  assert.equal(decision.budget.liveAllowance, "20");
+});
+
+test("approved spend decrements liveAllowance", async () => {
+  const service = new AgentBudgetService({
+    now: fixedClock("2026-04-25T10:00:00.000Z")
+  });
+
+  await service.createAgentBudget({
+    agentId: "agent-decrement",
+    owner: "owner-wallet",
+    mint: "usdc-mint",
+    totalBudget: "100",
+    rail: "magicblock-private"
+  });
+
+  const reserved = await service.reserveSpend("agent-decrement", "4", "coffee");
+  assert.equal(reserved.ghostAllowanceBefore, "10");
+  assert.equal(reserved.ghostAllowanceAfter, "6");
+  assert.equal(reserved.budget.liveAllowance, "6");
+});
+
+test("blocked spend does not decrement liveAllowance", async () => {
+  const service = new AgentBudgetService({
+    now: fixedClock("2026-04-25T10:00:00.000Z")
+  });
+
+  await service.createAgentBudget({
+    agentId: "agent-blocked",
+    owner: "owner-wallet",
+    mint: "usdc-mint",
+    totalBudget: "100",
+    currentBalance: "100",
+    liveAllowance: "3",
+    rail: "magicblock-private"
+  });
+
+  const decision = await service.canSpend("agent-blocked", "4");
+  assert.equal(decision.allowed, false);
+  assert.equal(decision.reason, "Requested spend exceeds live Ghost Allowance.");
+
+  await assert.rejects(() => service.reserveSpend("agent-blocked", "4", "coffee"), /Ghost Allowance/);
+  assert.equal((await service.getAgentBudget("agent-blocked"))?.liveAllowance, "3");
+});
+
+test("daily cap still blocks before allowance", async () => {
+  const service = new AgentBudgetService({
+    now: fixedClock("2026-04-25T10:00:00.000Z")
+  });
+
+  await service.createAgentBudget({
+    agentId: "agent-daily-cap",
+    owner: "owner-wallet",
+    mint: "usdc-mint",
+    totalBudget: "100",
+    currentBalance: "100",
+    dailyCapPercent: 10,
+    liveAllowance: "20",
+    rail: "magicblock-private"
+  });
+
+  const decision = await service.canSpend("agent-daily-cap", "11");
+  assert.equal(decision.allowed, false);
+  assert.equal(decision.reason, "Requested spend exceeds the remaining daily cap.");
+});
+
+test("expired session blocks and claws back liveAllowance", async () => {
+  const service = new AgentBudgetService({
+    now: fixedClock("2026-04-25T10:00:00.000Z")
+  });
+
+  await service.createAgentBudget({
+    agentId: "agent-expired",
+    owner: "owner-wallet",
+    mint: "usdc-mint",
+    totalBudget: "100",
+    liveAllowance: "10",
+    sessionEndsAt: "2026-04-25T09:59:00.000Z",
+    rail: "magicblock-private"
+  });
+
+  const decision = await service.canSpend("agent-expired", "1");
+  assert.equal(decision.allowed, false);
+  assert.equal(decision.reason, "Agent session has ended; live Ghost Allowance was clawed back.");
+  assert.equal(decision.budget.liveAllowance, "0");
 });
 
 const run = async (): Promise<void> => {

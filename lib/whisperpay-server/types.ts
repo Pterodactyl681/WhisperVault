@@ -8,6 +8,9 @@ export interface AgentPlanBudgetPolicySnapshot {
   spentToday: string;
   remainingDailyCapBefore: string;
   remainingDailyCapAfter: string;
+  allowanceMode?: "static" | "rolling";
+  ghostAllowanceBefore?: string;
+  ghostAllowanceAfter?: string;
 }
 
 export interface AgentPlanPrivateRailMetadata {
@@ -25,6 +28,9 @@ export interface AgentPlanReceiptMetadata {
   type: "agent-private-receipt";
   memoReveal: "permissioned";
   mode: "manual";
+  allowanceMode?: "static" | "rolling";
+  ghostAllowanceBefore?: string;
+  ghostAllowanceAfter?: string;
 }
 
 export interface ServerTelegramSpendMetadata {

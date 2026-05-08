@@ -6,6 +6,7 @@ import {
   type AgentBudgetReservationReceipt,
   type AgentBudgetReservationTransitionReceipt,
   type AgentBudgetSpendDecision,
+  type AgentBudgetAllowanceMode,
   type AgentBudgetStatus,
   type CreateAgentBudgetInput,
   type ReserveSpendReference
@@ -19,6 +20,12 @@ import {
 
 const DEFAULT_DAILY_CAP_PERCENT = 30;
 const DEFAULT_RESERVATION_REFERENCE = "reserved-spend";
+const DEFAULT_ALLOWANCE_MODE: AgentBudgetAllowanceMode = "rolling";
+const DEFAULT_LIVE_ALLOWANCE = "10";
+const DEFAULT_REFILL_AMOUNT = "5";
+const DEFAULT_REFILL_INTERVAL_MINUTES = 10;
+const DEFAULT_MAX_LIVE_ALLOWANCE = "20";
+const DEFAULT_CLAWBACK_ON_SESSION_END = true;
 
 interface AgentBudgetServiceOptions {
   repository?: AgentBudgetRepository;
@@ -83,6 +90,19 @@ const normalizeDailyCapPercent = (dailyCapPercent?: number): number => {
   return value;
 };
 
+const normalizeAllowanceMode = (allowanceMode?: AgentBudgetAllowanceMode): AgentBudgetAllowanceMode =>
+  allowanceMode === "static" ? "static" : DEFAULT_ALLOWANCE_MODE;
+
+const normalizePositiveInteger = (value: number | undefined, fallback: number, fieldName: string): number => {
+  const normalized = value ?? fallback;
+
+  if (!Number.isInteger(normalized) || normalized <= 0) {
+    throw new Error(`${fieldName} must be a positive integer.`);
+  }
+
+  return normalized;
+};
+
 const normalizeIsoTimestamp = (value: string | undefined, fallback: Date, fieldName: string): string => {
   const candidate = value?.trim() || fallback.toISOString();
 
@@ -91,6 +111,18 @@ const normalizeIsoTimestamp = (value: string | undefined, fallback: Date, fieldN
   }
 
   return new Date(candidate).toISOString();
+};
+
+const normalizeOptionalIsoTimestamp = (value: string | null | undefined, fieldName: string): string | null => {
+  if (value === undefined || value === null || !value.trim()) {
+    return null;
+  }
+
+  if (Number.isNaN(Date.parse(value))) {
+    throw new Error(`${fieldName} must be a valid ISO date/time string.`);
+  }
+
+  return new Date(value).toISOString();
 };
 
 const normalizeMetadata = (metadata: AgentBudget["metadata"]): AgentBudget["metadata"] => {
@@ -154,6 +186,25 @@ const sameUtcDay = (leftIso: string, rightIso: string): boolean => leftIso.slice
 const minBigInt = (left: bigint, right: bigint): bigint => (left < right ? left : right);
 
 const maxBigInt = (left: bigint, right: bigint): bigint => (left > right ? left : right);
+
+const isSessionExpired = (budget: AgentBudget, now: Date): boolean =>
+  Boolean(budget.sessionEndsAt && Date.parse(budget.sessionEndsAt) <= now.getTime());
+
+const normalizeBudgetAllowanceFields = (budget: AgentBudget, now: Date): AgentBudget => ({
+  ...budget,
+  allowanceMode: normalizeAllowanceMode(budget.allowanceMode),
+  liveAllowance: parseAmount(budget.liveAllowance ?? DEFAULT_LIVE_ALLOWANCE, "liveAllowance").toString(),
+  refillAmount: parseAmount(budget.refillAmount ?? DEFAULT_REFILL_AMOUNT, "refillAmount").toString(),
+  refillIntervalMinutes: normalizePositiveInteger(
+    budget.refillIntervalMinutes,
+    DEFAULT_REFILL_INTERVAL_MINUTES,
+    "refillIntervalMinutes"
+  ),
+  maxLiveAllowance: parseAmount(budget.maxLiveAllowance ?? DEFAULT_MAX_LIVE_ALLOWANCE, "maxLiveAllowance").toString(),
+  lastRefillAt: normalizeIsoTimestamp(budget.lastRefillAt, now, "lastRefillAt"),
+  sessionEndsAt: normalizeOptionalIsoTimestamp(budget.sessionEndsAt, "sessionEndsAt"),
+  clawbackOnSessionEnd: budget.clawbackOnSessionEnd ?? DEFAULT_CLAWBACK_ON_SESSION_END
+});
 
 /**
  * Daily cap uses the safer interpretation: we apply the percentage to the smaller of
@@ -277,6 +328,8 @@ export class AgentBudgetService {
     const totalBudget = parseAmount(input.totalBudget, "totalBudget");
     const currentBalance = parseAmount(input.currentBalance ?? input.totalBudget, "currentBalance");
     const spentToday = parseAmount(input.spentToday ?? "0", "spentToday");
+    const maxLiveAllowance = parseAmount(input.maxLiveAllowance ?? DEFAULT_MAX_LIVE_ALLOWANCE, "maxLiveAllowance");
+    const liveAllowance = parseAmount(input.liveAllowance ?? DEFAULT_LIVE_ALLOWANCE, "liveAllowance");
     const agentWallet = input.agentWallet?.trim() || undefined;
 
     const budget: AgentBudget = {
@@ -291,6 +344,18 @@ export class AgentBudgetService {
       status: normalizeStatus(input.status, currentBalance),
       rail: input.rail,
       allowPublicFallback: input.allowPublicFallback ?? false,
+      allowanceMode: normalizeAllowanceMode(input.allowanceMode),
+      liveAllowance: minBigInt(liveAllowance, maxLiveAllowance).toString(),
+      refillAmount: parseAmount(input.refillAmount ?? DEFAULT_REFILL_AMOUNT, "refillAmount").toString(),
+      refillIntervalMinutes: normalizePositiveInteger(
+        input.refillIntervalMinutes,
+        DEFAULT_REFILL_INTERVAL_MINUTES,
+        "refillIntervalMinutes"
+      ),
+      maxLiveAllowance: maxLiveAllowance.toString(),
+      lastRefillAt: normalizeIsoTimestamp(input.lastRefillAt, now, "lastRefillAt"),
+      sessionEndsAt: normalizeOptionalIsoTimestamp(input.sessionEndsAt, "sessionEndsAt"),
+      clawbackOnSessionEnd: input.clawbackOnSessionEnd ?? DEFAULT_CLAWBACK_ON_SESSION_END,
       ...(agentWallet ? { agentWallet } : {}),
       metadata: normalizeMetadata(input.metadata)
     };
@@ -305,12 +370,18 @@ export class AgentBudgetService {
 
   async getAgentBudget(agentId: string): Promise<AgentBudget | null> {
     const record = await this.repository.get(agentId);
-    return record ? cloneBudget(record.budget) : null;
+    if (!record) {
+      return null;
+    }
+
+    const normalized = await this.normalizeRecord(record);
+    return cloneBudget(normalized.budget);
   }
 
   async listAgentBudgets(): Promise<AgentBudget[]> {
     const records = await this.repository.list();
-    return records.map((record) => cloneBudget(record.budget));
+    const normalized = await Promise.all(records.map((record) => this.normalizeRecord(record)));
+    return normalized.map((record) => cloneBudget(record.budget));
   }
 
   async canSpend(agentId: string, amount: AgentBudgetAmountInput): Promise<AgentBudgetSpendDecision> {
@@ -346,8 +417,17 @@ export class AgentBudgetService {
       releasedReason: null
     };
 
+    const nextBudget: AgentBudget =
+      record.budget.allowanceMode === "rolling"
+        ? {
+            ...record.budget,
+            liveAllowance: decision.ghostAllowanceAfter
+          }
+        : record.budget;
+
     const saved = await this.repository.save({
       ...record,
+      budget: nextBudget,
       reservations: [...record.reservations, reservation]
     });
 
@@ -357,6 +437,9 @@ export class AgentBudgetService {
       reference: reservation.reference,
       paylinkId: reservation.paylinkId,
       reservedAmount: sumReservations(saved).toString(),
+      allowanceMode: decision.allowanceMode,
+      ghostAllowanceBefore: decision.ghostAllowanceBefore,
+      ghostAllowanceAfter: decision.ghostAllowanceAfter,
       budget: cloneBudget(saved.budget)
     };
   }
@@ -673,13 +756,28 @@ export class AgentBudgetService {
       throw new Error(`Agent budget not found for agent "${agentId}".`);
     }
 
-    return record;
+    return this.normalizeRecord(record);
   }
 
   private async getSyncedRecord(agentId: string): Promise<StoredAgentBudgetRecord> {
     const record = await this.getRecordOrThrow(agentId);
-    const { record: syncedRecord } = await this.syncDailySpend(record);
-    return syncedRecord;
+    const { record: dailySyncedRecord } = await this.syncDailySpend(record);
+    const { record: allowanceSyncedRecord } = await this.syncAllowance(dailySyncedRecord);
+    return allowanceSyncedRecord;
+  }
+
+  private async normalizeRecord(record: StoredAgentBudgetRecord): Promise<StoredAgentBudgetRecord> {
+    const now = this.now();
+    const normalizedBudget = normalizeBudgetAllowanceFields(record.budget, now);
+
+    if (JSON.stringify(normalizedBudget) === JSON.stringify(record.budget)) {
+      return record;
+    }
+
+    return this.repository.save({
+      ...record,
+      budget: normalizedBudget
+    });
   }
 
   private async syncDailySpend(
@@ -714,6 +812,61 @@ export class AgentBudgetService {
     };
   }
 
+  private async syncAllowance(
+    record: StoredAgentBudgetRecord
+  ): Promise<{ record: StoredAgentBudgetRecord; didRefill: boolean }> {
+    const now = this.now();
+    const budget = normalizeBudgetAllowanceFields(record.budget, now);
+    let nextBudget = budget;
+    let didRefill = false;
+
+    if (budget.clawbackOnSessionEnd && isSessionExpired(budget, now)) {
+      if (budget.liveAllowance !== "0") {
+        nextBudget = {
+          ...budget,
+          liveAllowance: "0"
+        };
+        didRefill = true;
+      }
+    } else if (budget.allowanceMode === "rolling") {
+      const elapsedMs = now.getTime() - Date.parse(budget.lastRefillAt);
+      const intervalMs = budget.refillIntervalMinutes * 60 * 1000;
+      const intervals = elapsedMs > 0 ? Math.floor(elapsedMs / intervalMs) : 0;
+
+      if (intervals > 0) {
+        const refill = BigInt(budget.refillAmount) * BigInt(intervals);
+        const liveAllowance = BigInt(budget.liveAllowance);
+        const maxLiveAllowance = BigInt(budget.maxLiveAllowance);
+        const nextLiveAllowance = minBigInt(maxLiveAllowance, liveAllowance + refill);
+        const nextLastRefillAt = new Date(Date.parse(budget.lastRefillAt) + intervals * intervalMs).toISOString();
+
+        nextBudget = {
+          ...budget,
+          liveAllowance: nextLiveAllowance.toString(),
+          lastRefillAt: nextLastRefillAt
+        };
+        didRefill = true;
+      }
+    }
+
+    if (!didRefill && JSON.stringify(nextBudget) === JSON.stringify(record.budget)) {
+      return {
+        record,
+        didRefill: false
+      };
+    }
+
+    const saved = await this.repository.save({
+      ...record,
+      budget: nextBudget
+    });
+
+    return {
+      record: saved,
+      didRefill
+    };
+  }
+
   private evaluateSpend(record: StoredAgentBudgetRecord, amount: bigint): AgentBudgetSpendDecision {
     const reservedAmount = sumReservations(record);
     const currentBalance = BigInt(record.budget.currentBalance);
@@ -721,10 +874,15 @@ export class AgentBudgetService {
     const availableBalance = maxBigInt(0n, currentBalance - reservedAmount);
     const usedToday = BigInt(record.budget.spentToday) + reservedAmount;
     const remainingDailyCap = maxBigInt(0n, dailyCap - usedToday);
+    const liveAllowance = BigInt(record.budget.liveAllowance);
+    const ghostAllowanceAfter =
+      record.budget.allowanceMode === "rolling" && amount <= liveAllowance ? liveAllowance - amount : liveAllowance;
 
     let reason: string | null = null;
 
-    if (record.budget.status === "paused") {
+    if (record.budget.clawbackOnSessionEnd && isSessionExpired(record.budget, this.now())) {
+      reason = "Agent session has ended; live Ghost Allowance was clawed back.";
+    } else if (record.budget.status === "paused") {
       reason = "Agent budget is paused.";
     } else if (record.budget.status === "exhausted" || currentBalance === 0n) {
       reason = "Agent budget is exhausted.";
@@ -732,6 +890,8 @@ export class AgentBudgetService {
       reason = "Requested spend exceeds available balance.";
     } else if (amount > remainingDailyCap) {
       reason = "Requested spend exceeds the remaining daily cap.";
+    } else if (record.budget.allowanceMode === "rolling" && amount > liveAllowance) {
+      reason = "Requested spend exceeds live Ghost Allowance.";
     }
 
     return {
@@ -742,6 +902,9 @@ export class AgentBudgetService {
       dailyCap: dailyCap.toString(),
       remainingDailyCap: remainingDailyCap.toString(),
       reservedAmount: reservedAmount.toString(),
+      allowanceMode: record.budget.allowanceMode,
+      ghostAllowanceBefore: liveAllowance.toString(),
+      ghostAllowanceAfter: ghostAllowanceAfter.toString(),
       budget: cloneBudget(record.budget)
     };
   }
