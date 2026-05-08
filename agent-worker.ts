@@ -1,4 +1,4 @@
-import { runAgentWorkerCliOnce } from "../lib/agent-worker";
+import { runAgentWorkerCliOnce } from "./lib/agent-worker";
 
 const run = async (): Promise<void> => {
   process.exitCode = await runAgentWorkerCliOnce();
