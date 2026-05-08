@@ -1,4 +1,4 @@
-import { parseWorkerPollIntervalMs, runAgentWorkerCliOnce, runAgentWorkerDaemon } from "../lib/agent-worker";
+import { parseWorkerPollIntervalMs, runAgentWorkerCliOnce, runAgentWorkerDaemon } from "./lib/agent-worker";
 
 const run = async (): Promise<void> => {
   const pollIntervalMs = parseWorkerPollIntervalMs();
