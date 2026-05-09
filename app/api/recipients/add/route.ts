@@ -11,4 +11,5 @@ const handlers = createCommandCenterHttpHandlers({
   ghostTabService
 });
 
+export const dynamic = "force-dynamic";
 export const POST = handlers.addRecipient;

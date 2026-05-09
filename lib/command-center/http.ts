@@ -35,6 +35,49 @@ type AgentPlanPayload = {
   receipt?: unknown;
 };
 
+type CommandCenterRouteName =
+  | "/api/agents"
+  | "/api/agents/create"
+  | "/api/agents/use"
+  | "/api/recipients"
+  | "/api/recipients/add"
+  | "/api/recipients/use"
+  | "/api/receipts"
+  | "/api/spend-intent";
+
+const readyLogs = new Set<string>();
+
+const logReadyOnce = (key: string, message: string): void => {
+  if (readyLogs.has(key)) {
+    return;
+  }
+
+  readyLogs.add(key);
+  console.info(`[Command Center] ${message}`);
+};
+
+const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+const isMissingSchemaError = (error: unknown): boolean => {
+  const message = errorMessage(error).toLowerCase();
+  return (
+    message.includes("does not exist") ||
+    message.includes("could not find the table") ||
+    message.includes("could not find the column") ||
+    message.includes("schema cache") ||
+    message.includes("undefined_table") ||
+    message.includes("undefined_column")
+  );
+};
+
+const logRouteError = (route: CommandCenterRouteName, error: unknown): void => {
+  console.error(`[Command Center] ${route} failed: ${errorMessage(error)}`);
+};
+
+const logSchemaFallback = (route: CommandCenterRouteName, detail: string, error: unknown): void => {
+  console.warn(`[Command Center] ${route} returning empty data because ${detail}: ${errorMessage(error)}`);
+};
+
 const normalizeAgentName = (value: string): string =>
   value
     .trim()
@@ -192,8 +235,16 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
 
     if (options.ghostTabService) {
       for (const budget of ownedBudgets) {
-        await options.ghostTabService.ensureSessionForBudget(budget);
-        ghostTabs.set(budget.agentId, await options.ghostTabService.getSnapshot(budget.agentId));
+        try {
+          await options.ghostTabService.ensureSessionForBudget(budget);
+          ghostTabs.set(budget.agentId, await options.ghostTabService.getSnapshot(budget.agentId));
+        } catch (error) {
+          if (!isMissingSchemaError(error)) {
+            throw error;
+          }
+
+          logSchemaFallback("/api/agents", "Ghost Tab schema is not migrated", error);
+        }
       }
     }
 
@@ -204,6 +255,25 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
       activeAgent,
       ghostTabs
     };
+  };
+
+  const loadAgentStateForRead = async (route: CommandCenterRouteName, controllerWallet: string) => {
+    try {
+      return await loadAgentState(controllerWallet);
+    } catch (error) {
+      if (!isMissingSchemaError(error)) {
+        throw error;
+      }
+
+      logSchemaFallback(route, "Command Center schema is not fully migrated", error);
+      return {
+        budgets: [] as AgentBudget[],
+        ownedBudgets: [] as AgentBudget[],
+        agents: [] as RegisteredAgent[],
+        activeAgent: null,
+        ghostTabs: new Map<string, GhostTabSnapshot>()
+      };
+    }
   };
 
   const findAgentForRequest = async (controllerWallet: string, value: unknown): Promise<RegisteredAgent> => {
@@ -222,7 +292,8 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
     listAgents: async (request) => {
       try {
         const controllerWallet = readControllerWallet(request, undefined, demoControllerWallet);
-        const { agents, activeAgent, ghostTabs } = await loadAgentState(controllerWallet);
+        const { agents, activeAgent, ghostTabs } = await loadAgentStateForRead("/api/agents", controllerWallet);
+        logReadyOnce("agent-registry", "agent registry ready");
 
         return json({
           controllerWallet,
@@ -230,6 +301,7 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
           agents: agents.map((agent) => serializeAgent(agent, agent.id === activeAgent?.id, ghostTabs.get(agent.id)))
         });
       } catch (error) {
+        logRouteError("/api/agents", error);
         return handleKnownError(error);
       }
     },
@@ -291,6 +363,7 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
           201
         );
       } catch (error) {
+        logRouteError("/api/agents/create", error);
         return handleKnownError(error);
       }
     },
@@ -308,6 +381,7 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
           agent: serializeAgent(agent, true, options.ghostTabService ? await options.ghostTabService.getSnapshot(agent.id) : null)
         });
       } catch (error) {
+        logRouteError("/api/agents/use", error);
         return handleKnownError(error);
       }
     },
@@ -315,8 +389,20 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
     listRecipients: async (request) => {
       try {
         const controllerWallet = readControllerWallet(request, undefined, demoControllerWallet);
-        const { activeAgent } = await loadAgentState(controllerWallet);
-        const recipients = await options.registryService.listRecipients(controllerWallet);
+        const { activeAgent } = await loadAgentStateForRead("/api/recipients", controllerWallet);
+        let recipients: AgentRecipient[] = [];
+
+        try {
+          recipients = await options.registryService.listRecipients(controllerWallet);
+        } catch (error) {
+          if (!isMissingSchemaError(error)) {
+            throw error;
+          }
+
+          logSchemaFallback("/api/recipients", "recipient registry table is not migrated", error);
+        }
+
+        logReadyOnce("recipient-registry", "recipient registry ready");
 
         return json({
           controllerWallet,
@@ -326,6 +412,7 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
           recipients: recipients.map((recipient) => serializeRecipient(recipient, activeAgent))
         });
       } catch (error) {
+        logRouteError("/api/recipients", error);
         return handleKnownError(error);
       }
     },
@@ -347,6 +434,7 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
           201
         );
       } catch (error) {
+        logRouteError("/api/recipients/add", error);
         return handleKnownError(error);
       }
     },
@@ -372,6 +460,7 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
           agent: serializeAgent(agent, true, options.ghostTabService ? await options.ghostTabService.getSnapshot(agent.id) : null)
         });
       } catch (error) {
+        logRouteError("/api/recipients/use", error);
         return handleKnownError(error);
       }
     },
@@ -379,18 +468,33 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
     listReceipts: async (request) => {
       try {
         const controllerWallet = readControllerWallet(request, undefined, demoControllerWallet);
-        const { agents } = await loadAgentState(controllerWallet);
+        const { agents } = await loadAgentStateForRead("/api/receipts", controllerWallet);
         const ownedAgentIds = new Set(agents.map((agent) => agent.id));
-        const receipts = (await options.paylinkService.listPaymentIntents())
+        let paymentIntents: ServerPaymentIntent[] = [];
+
+        try {
+          paymentIntents = await options.paylinkService.listPaymentIntents();
+        } catch (error) {
+          if (!isMissingSchemaError(error)) {
+            throw error;
+          }
+
+          logSchemaFallback("/api/receipts", "receipt/payment intent table is not migrated", error);
+        }
+
+        const receipts = paymentIntents
           .filter((paymentIntent) => receiptBelongsToController(paymentIntent, controllerWallet, ownedAgentIds))
           .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
           .map(serializeReceipt);
+
+        logReadyOnce("receipts", "receipts ready");
 
         return json({
           controllerWallet,
           receipts
         });
       } catch (error) {
+        logRouteError("/api/receipts", error);
         return handleKnownError(error);
       }
     },
@@ -460,6 +564,7 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
           201
         );
       } catch (error) {
+        logRouteError("/api/spend-intent", error);
         return handleKnownError(error);
       }
     }

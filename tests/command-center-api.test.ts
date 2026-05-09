@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { AgentBudgetService, DEFAULT_DEMO_AGENT_RECIPIENT } from "../lib/agent-budget";
+import { AgentBudgetService, DEFAULT_DEMO_AGENT_RECIPIENT, type AgentBudgetPolicyAdapter } from "../lib/agent-budget";
 import { OffchainAgentBudgetPolicyAdapter } from "../lib/agent-budget/policy-adapter";
 import { AGENT_BUDGET_OWNER_HEADER } from "../lib/agent-vault/http";
 import { createCommandCenterHttpHandlers } from "../lib/command-center/http";
@@ -205,6 +205,58 @@ test("dashboard source renders agent list and Ghost Allowance surfaces", async (
   assert.match(source, /Ghost Allowance/);
   assert.match(source, /Spend Intent Panel/);
   assert.match(source, /\/api\/agents/);
+});
+
+test("read-only Command Center APIs return empty arrays when schema is missing", async () => {
+  const schemaError = new Error('Supabase GET whispervault_agents failed with 404 Error: relation "whispervault_agents" does not exist');
+  const handlers = createCommandCenterHttpHandlers({
+    budgetPolicy: {
+      mode: "offchain",
+      listBudgets: async () => {
+        throw schemaError;
+      }
+    } as unknown as AgentBudgetPolicyAdapter,
+    registryService: {
+      listAgents: async () => {
+        throw schemaError;
+      },
+      getActiveAgent: async () => {
+        throw schemaError;
+      },
+      listRecipients: async () => {
+        throw schemaError;
+      }
+    } as unknown as AgentRegistryService,
+    paylinkService: {
+      listPaymentIntents: async () => {
+        throw schemaError;
+      }
+    } as unknown as WhisperPayServerService
+  });
+
+  const agents = await readJson<{ agents: unknown[] }>(
+    await handlers.listAgents(new Request("http://localhost/api/agents", withOwner()))
+  );
+  const recipients = await readJson<{ recipients: unknown[] }>(
+    await handlers.listRecipients(new Request("http://localhost/api/recipients", withOwner()))
+  );
+  const receipts = await readJson<{ receipts: unknown[] }>(
+    await handlers.listReceipts(new Request("http://localhost/api/receipts", withOwner()))
+  );
+
+  assert.deepEqual(agents.agents, []);
+  assert.deepEqual(recipients.recipients, []);
+  assert.deepEqual(receipts.receipts, []);
+});
+
+test("combined Command Center schema safety migration includes required tables", async () => {
+  const source = readFileSync(path.join(process.cwd(), "migrations", "0006_command_center_combined_schema.sql"), "utf8");
+
+  assert.match(source, /create table if not exists whispervault_agents/);
+  assert.match(source, /create table if not exists whispervault_agent_recipients/);
+  assert.match(source, /create table if not exists whisperpay_payment_intents/);
+  assert.match(source, /create table if not exists whispervault_ghost_tab_sessions/);
+  assert.match(source, /add column if not exists pending_execution jsonb/);
 });
 
 const run = async (): Promise<void> => {
