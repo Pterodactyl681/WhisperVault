@@ -48,10 +48,16 @@ const HELP_TEXT = [
   "WhisperVault commands:",
   "/link <code>",
   "/vaults",
+  "/agents",
+  "/agent use <name>",
   "/spend 5 buy coffee",
   "/spend 100 buy gear",
-  "/receipt <paylinkId>"
+  "/receipt <paylinkId>",
+  "/rogue"
 ].join("\n");
+
+const CARD_DIVIDER = "━━━━━━━━━━━━";
+const SOLANA_DEVNET_EXPLORER_BASE_URL = "https://explorer.solana.com/tx";
 
 const assertNonEmptyString = (value: string, fieldName: string): string => {
   const normalized = value.trim();
@@ -77,35 +83,80 @@ const formatMintLabel = (mint: string): string => {
   return mint.trim() || "USDC";
 };
 
-const formatRail = (budget: AgentBudget): string =>
-  `${budget.rail}${budget.allowPublicFallback ? " (fallback on)" : " (fallback off)"}`;
+const formatPrivateRailLabel = (rail: AgentBudget["rail"]): string =>
+  rail === "magicblock-private" ? "Mirage Private" : "Solana Public";
+
+const formatNativeFallbackLabel = (): string => "Solana Native Devnet";
+
+const formatExecutionRailLabel = (executionRail?: string | null): string => {
+  if (executionRail === "solana-devnet-native-fallback") {
+    return "Solana Native Devnet Fallback";
+  }
+
+  if (executionRail === "solana-devnet-spl-fallback") {
+    return "Solana Devnet SPL Fallback";
+  }
+
+  return "Mirage Private Rail";
+};
+
+const formatStatusLabel = (status: string): string => status.slice(0, 1).toUpperCase() + status.slice(1);
+
+const formatPolicyReason = (reason: string): string => {
+  if (/live Ghost Allowance/i.test(reason)) {
+    return "Ghost Allowance exceeded";
+  }
+
+  if (/remaining daily cap/i.test(reason)) {
+    return "Daily budget exceeded";
+  }
+
+  if (/paused/i.test(reason)) {
+    return "Agent Vault paused";
+  }
+
+  if (/exhausted/i.test(reason)) {
+    return "Agent Vault exhausted";
+  }
+
+  if (/available balance/i.test(reason)) {
+    return "Available balance exceeded";
+  }
+
+  return reason.replace(/\.$/, "");
+};
+
+const formatGhostAllowanceBar = (liveAllowance: string, maxLiveAllowance: string): string => {
+  const live = toBigInt(liveAllowance);
+  const max = toBigInt(maxLiveAllowance);
+  const width = 10n;
+
+  if (max <= 0n) {
+    return "░░░░░░░░░░";
+  }
+
+  const filled = Number((live * width) / max);
+  return `${"█".repeat(Math.max(0, Math.min(10, filled)))}${"░".repeat(Math.max(0, 10 - filled))}`;
+};
+
+const formatShortSignature = (signature: string | null | undefined): string => {
+  const normalized = signature?.trim();
+
+  if (!normalized) {
+    return "pending";
+  }
+
+  return normalized.length <= 16 ? normalized : `${normalized.slice(0, 8)}...${normalized.slice(-8)}`;
+};
+
+const formatSolanaExplorerDevnetLink = (signature: string): string =>
+  `${SOLANA_DEVNET_EXPLORER_BASE_URL}/${signature}?cluster=devnet`;
 
 const calculateDailyCap = (budget: AgentBudget): string => {
   const currentBalance = toBigInt(budget.currentBalance);
   const totalBudget = toBigInt(budget.totalBudget);
   const capBase = currentBalance < totalBudget ? currentBalance : totalBudget;
   return ((capBase * BigInt(budget.dailyCapPercent)) / 100n).toString();
-};
-
-const formatNextRefill = (budget: AgentBudget): string => {
-  if (budget.allowanceMode !== "rolling") {
-    return "off";
-  }
-
-  if (BigInt(budget.liveAllowance) >= BigInt(budget.maxLiveAllowance)) {
-    return "ready";
-  }
-
-  const intervalMs = budget.refillIntervalMinutes * 60 * 1000;
-  const nextRefillAt = Date.parse(budget.lastRefillAt) + intervalMs;
-  const remainingMs = nextRefillAt - Date.now();
-
-  if (remainingMs <= 0) {
-    return "now";
-  }
-
-  const remainingMinutes = Math.ceil(remainingMs / 60_000);
-  return remainingMinutes === 1 ? "in 1 min" : `in ${remainingMinutes} min`;
 };
 
 const parseSpendShortcut = (command: ParsedTelegramCommand): ParsedSpendCommand | null => {
@@ -163,6 +214,9 @@ const chooseDefaultVault = (vaults: AgentBudget[]): AgentBudget | null =>
   vaults[0] ??
   null;
 
+const chooseVaultForContext = (vaults: AgentBudget[], activeAgentId?: string | null): AgentBudget | null =>
+  (activeAgentId ? vaults.find((budget) => budget.agentId === activeAgentId) : null) ?? chooseDefaultVault(vaults);
+
 const asOwnerHeaders = (controllerWallet: string): Headers => {
   const headers = new Headers();
   headers.set(AGENT_BUDGET_OWNER_HEADER, controllerWallet);
@@ -181,6 +235,8 @@ export class TelegramCommandService {
   private readonly paylinkService: WhisperPayServerService;
 
   private readonly origin: string;
+
+  private readonly activeAgentByTelegramUser = new Map<string, string>();
 
   constructor(options: TelegramCommandServiceOptions) {
     this.telegramLinkService = options.telegramLinkService;
@@ -206,10 +262,16 @@ export class TelegramCommandService {
         return this.handleLinkCommand(input.telegramUserId, parsed);
       case "vaults":
         return this.handleVaultsCommand(input.telegramUserId);
+      case "agents":
+        return this.handleAgentsCommand(input.telegramUserId);
+      case "agent":
+        return this.handleAgentCommand(input.telegramUserId, parsed);
       case "spend":
         return this.handleSpendCommand(input.telegramUserId, input.telegramChatId ?? null, text, parsed);
       case "receipt":
         return this.handleReceiptCommand(input.telegramUserId, parsed);
+      case "rogue":
+        return this.handleRogueCommand(input.telegramUserId);
       default:
         return HELP_TEXT;
     }
@@ -263,21 +325,106 @@ export class TelegramCommandService {
       budgets.map(async (budget) => {
         const decision = await this.budgetPolicy.canSpend(budget.agentId, "1");
         const syncedBudget = decision.budget;
-        const balance = `${syncedBudget.currentBalance}/${syncedBudget.totalBudget} ${formatMintLabel(syncedBudget.mint)}`;
+        const mint = formatMintLabel(syncedBudget.mint);
+        const balance = `${syncedBudget.currentBalance} / ${syncedBudget.totalBudget} ${mint}`;
+        const ghostAllowance = `${formatGhostAllowanceBar(syncedBudget.liveAllowance, syncedBudget.maxLiveAllowance)} ${syncedBudget.liveAllowance} / ${syncedBudget.maxLiveAllowance}`;
         return [
-          `- ${syncedBudget.agentId}`,
-          `  Balance: ${balance}`,
-          `  Daily cap: ${calculateDailyCap(syncedBudget)} ${formatMintLabel(syncedBudget.mint)}`,
-          `  Daily left: ${decision.remainingDailyCap} ${formatMintLabel(syncedBudget.mint)}`,
-          `  Ghost Allowance: ${syncedBudget.liveAllowance}/${syncedBudget.maxLiveAllowance} ${formatMintLabel(syncedBudget.mint)}`,
-          `  Refill: +${syncedBudget.refillAmount} every ${syncedBudget.refillIntervalMinutes} min`,
-          `  Next refill: ${formatNextRefill(syncedBudget)}`,
-          `  Rail: ${formatRail(syncedBudget)}`
+          CARD_DIVIDER,
+          `☕ ${syncedBudget.agentId}`,
+          CARD_DIVIDER,
+          "",
+          "Balance",
+          balance,
+          "",
+          "Ghost Allowance",
+          `${ghostAllowance} ${mint}`,
+          "",
+          "Daily Budget",
+          `${decision.remainingDailyCap} / ${calculateDailyCap(syncedBudget)} ${mint} remaining`,
+          "",
+          "Execution Rail",
+          `Private Rail: ${formatPrivateRailLabel(syncedBudget.rail)}`,
+          `Native Fallback: ${formatNativeFallbackLabel()}`,
+          "",
+          "Status",
+          `● ${formatStatusLabel(syncedBudget.status)}`,
+          "● Spend Firewall Enabled",
+          "● Devnet Execution Ready"
         ].join("\n");
       })
     );
 
-    return [`Agent Vaults for ${shortenAddress(controllerWallet)}:`, ...lines].join("\n");
+    return ["🧠 WhisperVault", "", "Controller", shortenAddress(controllerWallet), "", ...lines].join("\n");
+  }
+
+  private async handleAgentsCommand(telegramUserId: string | null): Promise<string> {
+    const controllerWallet = await this.resolveLinkedControllerWallet(telegramUserId);
+
+    if (!controllerWallet) {
+      return this.renderLinkRequiredMessage();
+    }
+
+    const budgets = (await this.budgetPolicy.listBudgets()).filter((budget) => budget.owner === controllerWallet);
+
+    if (budgets.length === 0) {
+      return "No Agent Vaults found for this controller wallet yet. Create one in the WhisperVault web app first.";
+    }
+
+    const activeAgentId = telegramUserId ? this.activeAgentByTelegramUser.get(telegramUserId) : null;
+    const lines = await Promise.all(
+      budgets.map(async (budget) => {
+        const decision = await this.budgetPolicy.canSpend(budget.agentId, "1");
+        const syncedBudget = decision.budget;
+        const activeSuffix = activeAgentId === syncedBudget.agentId ? "  Active" : "";
+        return [
+          `● ${syncedBudget.agentId}${activeSuffix}`,
+          `Ghost: ${syncedBudget.liveAllowance}/${syncedBudget.maxLiveAllowance}`,
+          syncedBudget.status === "paused" ? "Paused" : `Daily left: ${decision.remainingDailyCap}`
+        ].join("\n");
+      })
+    );
+
+    return ["🧠 Active Agents", "", ...lines].join("\n\n");
+  }
+
+  private async handleAgentCommand(telegramUserId: string | null, command: ParsedTelegramCommand): Promise<string> {
+    const controllerWallet = await this.resolveLinkedControllerWallet(telegramUserId);
+
+    if (!controllerWallet) {
+      return this.renderLinkRequiredMessage();
+    }
+
+    const action = command.args[0]?.trim().toLowerCase() ?? "";
+    const requestedAgentId = command.args[1]?.trim() ?? "";
+
+    if (action !== "use" || !requestedAgentId) {
+      return "Usage: /agent use <name>";
+    }
+
+    const budgets = (await this.budgetPolicy.listBudgets()).filter((budget) => budget.owner === controllerWallet);
+    const selected = budgets.find((budget) => budget.agentId === requestedAgentId);
+
+    if (!selected) {
+      return [
+        "Agent Vault not found.",
+        "",
+        "Use /agents to view available Agent Vaults."
+      ].join("\n");
+    }
+
+    if (telegramUserId) {
+      this.activeAgentByTelegramUser.set(telegramUserId, selected.agentId);
+    }
+
+    return [
+      "🧠 Agent Vault Switched",
+      "",
+      "Active Agent",
+      selected.agentId,
+      "",
+      "Spend Firewall",
+      "Context updated"
+    ].join("\n");
   }
 
   private async handleSpendCommand(
@@ -306,7 +453,10 @@ export class TelegramCommandService {
     }
 
     const vaults = (await this.budgetPolicy.listBudgets()).filter((budget) => budget.owner === controllerWallet);
-    const selectedVault = chooseDefaultVault(vaults);
+    const selectedVault = chooseVaultForContext(
+      vaults,
+      telegramUserId ? this.activeAgentByTelegramUser.get(telegramUserId) : null
+    );
 
     if (!selectedVault) {
       return "No Agent Vault is linked to this controller wallet yet. Create one in the WhisperVault web app first.";
@@ -351,27 +501,60 @@ export class TelegramCommandService {
     }
 
     if (!payload.allowed) {
+      const decision = await this.budgetPolicy.canSpend(selectedVault.agentId, spend.amount);
+      const mint = formatMintLabel(selectedVault.mint);
+      const reason = formatPolicyReason(payload.reason);
+      const available =
+        /Ghost Allowance exceeded/i.test(reason)
+          ? decision.ghostAllowanceBefore
+          : /Daily budget exceeded/i.test(reason)
+            ? decision.remainingDailyCap
+            : decision.availableBalance;
       return [
-        "Spend Firewall: Blocked",
-        `Reason: ${payload.reason}`,
-        "Private spend: none",
-        "Mirage command: not generated"
+        "🛑 Spend Blocked",
+        "",
+        "Reason",
+        reason,
+        "",
+        "Requested",
+        `${spend.amount} ${mint}`,
+        "",
+        "Available",
+        `${available} ${mint}`,
+        "",
+        "No execution rail generated."
       ].join("\n");
     }
 
-    return [
-      "Spend Firewall: Passed",
-      `Agent: ${selectedVault.agentId}`,
-      `Amount: ${formatTokenAmount(payload.amount, payload.mint)}`,
-      ...(payload.allowanceMode === "rolling" && payload.ghostAllowanceBefore && payload.ghostAllowanceAfter
-        ? [`Ghost Allowance: ${payload.ghostAllowanceBefore} → ${payload.ghostAllowanceAfter} ${formatMintLabel(payload.mint)}`]
-        : []),
-      "Private spend: created",
-      "Mirage command: ready",
-      "Execution: pending/manual",
-      "Receipt: available",
-      `Paylink/Receipt id: ${payload.paylinkId}`
-    ].join("\n");
+    const approvedLines = [
+      "🛡 Spend Firewall Approved",
+      "",
+      "Agent",
+      selectedVault.agentId,
+      "",
+      "Request",
+      formatTokenAmount(payload.amount, payload.mint),
+      `“${spend.goal}”`,
+      "",
+      "Execution Path",
+      "Mirage Private Rail",
+      "",
+      "Native Fallback",
+      formatNativeFallbackLabel(),
+      ""
+    ];
+
+    if (payload.allowanceMode === "rolling" && payload.ghostAllowanceBefore && payload.ghostAllowanceAfter) {
+      approvedLines.push(
+        "Ghost Allowance",
+        `${payload.ghostAllowanceBefore} → ${payload.ghostAllowanceAfter} ${formatMintLabel(payload.mint)}`,
+        ""
+      );
+    }
+
+    approvedLines.push("Receipt", payload.paylinkId, "", "Status", "Pending execution");
+
+    return approvedLines.join("\n");
   }
 
   private async handleReceiptCommand(telegramUserId: string | null, command: ParsedTelegramCommand): Promise<string> {
@@ -411,15 +594,117 @@ export class TelegramCommandService {
         ? "confirmed/manual"
         : "pending/manual";
     const status = reservationState === "confirmed" ? "confirmed" : paymentIntent.status;
+    const manualExecution = paymentIntent.metadata?.manualExecution;
+    const txSignature = manualExecution?.txSignature ?? paymentIntent.txSignature;
+
+    if (txSignature) {
+      return [
+        "✅ Execution Confirmed",
+        "",
+        "Agent",
+        agentId,
+        "",
+        "Amount",
+        formatTokenAmount(paymentIntent.amount, paymentIntent.mint),
+        "",
+        "Execution Rail",
+        formatExecutionRailLabel(manualExecution?.executionRail),
+        "",
+        "Policy Decision",
+        "Approved by Spend Firewall",
+        "",
+        "Tx Signature",
+        formatShortSignature(txSignature),
+        "",
+        "Explorer",
+        formatSolanaExplorerDevnetLink(txSignature),
+        "",
+        "Receipt ID",
+        paymentIntent.paylinkId,
+        "",
+        "Status",
+        "Confirmed"
+      ].join("\n");
+    }
 
     return [
-      `Status: ${status}`,
-      `Agent: ${agentId}`,
-      `Amount: ${formatTokenAmount(paymentIntent.amount, paymentIntent.mint)}`,
-      "Policy decision: approved",
-      `Mirage ready: ${paymentIntent.magicPrivate?.enabled ? "yes" : "no"}`,
-      `Execution status: ${executionStatus}`,
-      `Tx signature: ${paymentIntent.txSignature ?? "pending"}`
+      "🧾 Agent Vault Receipt",
+      "",
+      "Agent",
+      agentId,
+      "",
+      "Amount",
+      formatTokenAmount(paymentIntent.amount, paymentIntent.mint),
+      "",
+      "Execution Rail",
+      paymentIntent.magicPrivate?.enabled ? "Mirage Private Rail" : "Native Fallback",
+      "",
+      "Policy Decision",
+      "Approved by Spend Firewall",
+      "",
+      "Receipt ID",
+      paymentIntent.paylinkId,
+      "",
+      "Status",
+      status === "pending" || executionStatus === "pending/manual" ? "Pending execution" : formatStatusLabel(status)
+    ].join("\n");
+  }
+
+  private async handleRogueCommand(telegramUserId: string | null): Promise<string> {
+    const controllerWallet = await this.resolveLinkedControllerWallet(telegramUserId);
+
+    if (!controllerWallet) {
+      return this.renderLinkRequiredMessage();
+    }
+
+    return [
+      "👾 Rogue Agent Simulator",
+      "",
+      CARD_DIVIDER,
+      "Attempt 1",
+      CARD_DIVIDER,
+      "5 USDC coffee purchase",
+      "",
+      "✅ Approved",
+      "Reason:",
+      "Within Ghost Allowance",
+      "",
+      CARD_DIVIDER,
+      "Attempt 2",
+      CARD_DIVIDER,
+      "30 USDC electronics purchase",
+      "",
+      "🛡 Blocked",
+      "Reason:",
+      "Ghost Allowance exceeded",
+      "",
+      CARD_DIVIDER,
+      "Attempt 3",
+      CARD_DIVIDER,
+      "100 USDC laptop purchase",
+      "",
+      "🛡 Blocked",
+      "Reason:",
+      "Daily budget exceeded",
+      "",
+      CARD_DIVIDER,
+      "Attempt 4",
+      CARD_DIVIDER,
+      "Public transfer attempt",
+      "",
+      "🛡 Blocked",
+      "Reason:",
+      "Private rail policy enforced",
+      "",
+      CARD_DIVIDER,
+      "Simulation Summary",
+      CARD_DIVIDER,
+      "",
+      "Safe requests approved: 1",
+      "Unsafe requests blocked: 3",
+      "Unsafe executions prevented: 3",
+      "",
+      "Spend Firewall integrity maintained."
     ].join("\n");
   }
 

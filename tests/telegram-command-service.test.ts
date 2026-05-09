@@ -126,13 +126,15 @@ test("/vaults for linked user lists vaults", async () => {
     text: "/vaults"
   });
 
-  assert.match(reply, /Agent Vaults for/);
+  assert.match(reply, /🧠 WhisperVault/);
+  assert.match(reply, /Controller/);
   assert.match(reply, /coffee-agent/);
-  assert.match(reply, /Balance: 100\/100 USDC/);
-  assert.match(reply, /Ghost Allowance: 10\/20 USDC/);
-  assert.match(reply, /Refill: \+5 every 10 min/);
-  assert.match(reply, /Next refill:/);
-  assert.match(reply, /Rail: magicblock-private \(fallback off\)/);
+  assert.match(reply, /Balance\n100 \/ 100 USDC/);
+  assert.match(reply, /Ghost Allowance\n█████░░░░░ 10 \/ 20 USDC/);
+  assert.match(reply, /Daily Budget\n30 \/ 30 USDC remaining/);
+  assert.match(reply, /Private Rail: Mirage Private/);
+  assert.match(reply, /Native Fallback: Solana Native Devnet/);
+  assert.match(reply, /Spend Firewall Enabled/);
 });
 
 test("/spend coffee linked uses approved path when budget allows", async () => {
@@ -144,11 +146,14 @@ test("/spend coffee linked uses approved path when budget allows", async () => {
     text: "/spend coffee"
   });
 
-  assert.match(reply, /Spend Firewall: Passed/);
-  assert.match(reply, /Ghost Allowance: 10 → 5 USDC/);
-  assert.match(reply, /Private spend: created/);
-  assert.match(reply, /Execution: pending\/manual/);
-  assert.match(reply, /Paylink\/Receipt id: pl_/);
+  assert.match(reply, /🛡 Spend Firewall Approved/);
+  assert.match(reply, /Ghost Allowance\n10 → 5 USDC/);
+  assert.match(reply, /Agent\ncoffee-agent/);
+  assert.match(reply, /Request\n5 USDC/);
+  assert.match(reply, /Execution Path\nMirage Private Rail/);
+  assert.match(reply, /Native Fallback\nSolana Native Devnet/);
+  assert.match(reply, /Receipt\npl_/);
+  assert.match(reply, /Status\nPending execution/);
   assert.equal((await paylinkService.listPaymentIntents()).length, 1);
 });
 
@@ -161,8 +166,11 @@ test("/spend blocked by allowance explains Ghost Allowance", async () => {
     text: "/spend 11 buy snacks"
   });
 
-  assert.match(reply, /Spend Firewall: Blocked/);
-  assert.match(reply, /Reason: Requested spend exceeds live Ghost Allowance\./);
+  assert.match(reply, /🛑 Spend Blocked/);
+  assert.match(reply, /Reason\nGhost Allowance exceeded/);
+  assert.match(reply, /Requested\n11 USDC/);
+  assert.match(reply, /Available\n10 USDC/);
+  assert.match(reply, /No execution rail generated\./);
 });
 
 test("/spend from Telegram stores chat metadata on spend artifacts", async () => {
@@ -197,8 +205,79 @@ test("/spend gear linked uses blocked path when cap is exceeded", async () => {
     text: "/spend gear"
   });
 
-  assert.match(reply, /Spend Firewall: Blocked/);
-  assert.match(reply, /remaining daily cap/i);
+  assert.match(reply, /🛑 Spend Blocked/);
+  assert.match(reply, /Reason\nDaily budget exceeded/);
+});
+
+test("/agents lists active agent vaults and /agent use switches spend context", async () => {
+  const { service, telegramLinkService, budgetService } = await createHarness();
+  await budgetService.createAgentBudget({
+    agentId: "travel-agent",
+    owner: VALID_CONTROLLER,
+    agentWallet: "agent-wallet-travel",
+    mint: "USDC",
+    totalBudget: "200",
+    currentBalance: "200",
+    liveAllowance: "5",
+    maxLiveAllowance: "10",
+    rail: "magicblock-private"
+  });
+  await budgetService.createAgentBudget({
+    agentId: "shopping-agent",
+    owner: VALID_CONTROLLER,
+    agentWallet: "agent-wallet-shopping",
+    mint: "USDC",
+    totalBudget: "50",
+    currentBalance: "50",
+    status: "paused",
+    liveAllowance: "0",
+    maxLiveAllowance: "15",
+    rail: "magicblock-private"
+  });
+  await linkTelegramUser(telegramLinkService);
+
+  const agentsReply = await service.handleTextCommand({
+    telegramUserId: "777",
+    text: "/agents"
+  });
+
+  assert.match(agentsReply, /🧠 Active Agents/);
+  assert.match(agentsReply, /● coffee-agent\nGhost: 10\/20\nDaily left: 30/);
+  assert.match(agentsReply, /● travel-agent\nGhost: 5\/10\nDaily left: 60/);
+  assert.match(agentsReply, /● shopping-agent\nGhost: 0\/15\nPaused/);
+
+  const switchReply = await service.handleTextCommand({
+    telegramUserId: "777",
+    text: "/agent use travel-agent"
+  });
+
+  assert.match(switchReply, /🧠 Agent Vault Switched/);
+  assert.match(switchReply, /Active Agent\ntravel-agent/);
+
+  const spendReply = await service.handleTextCommand({
+    telegramUserId: "777",
+    text: "/spend 2 buy ticket"
+  });
+
+  assert.match(spendReply, /Agent\ntravel-agent/);
+});
+
+test("/rogue renders simulator without creating execution artifacts", async () => {
+  const { service, telegramLinkService, paylinkService } = await createHarness();
+  await linkTelegramUser(telegramLinkService);
+
+  const reply = await service.handleTextCommand({
+    telegramUserId: "777",
+    text: "/rogue"
+  });
+
+  assert.match(reply, /👾 Rogue Agent Simulator/);
+  assert.match(reply, /Attempt 1/);
+  assert.match(reply, /✅ Approved/);
+  assert.match(reply, /Ghost Allowance exceeded/);
+  assert.match(reply, /Private rail policy enforced/);
+  assert.match(reply, /Unsafe executions prevented: 3/);
+  assert.equal((await paylinkService.listPaymentIntents()).length, 0);
 });
 
 test("/receipt rejects unauthorized paylink access", async () => {
@@ -209,7 +288,7 @@ test("/receipt rejects unauthorized paylink access", async () => {
     telegramUserId: "owner-user",
     text: "/spend coffee"
   });
-  const paylinkId = spendReply.match(/Paylink\/Receipt id: (\S+)/)?.[1];
+  const paylinkId = spendReply.match(/Receipt\n(pl_\S+)/)?.[1];
   assert.ok(paylinkId);
 
   const otherHarness = await createHarness(false);
@@ -222,6 +301,40 @@ test("/receipt rejects unauthorized paylink access", async () => {
   });
 
   assert.match(reply, /not linked yet/i);
+});
+
+test("/receipt renders confirmed devnet explorer link", async () => {
+  const { service, telegramLinkService, paylinkService } = await createHarness();
+  await linkTelegramUser(telegramLinkService);
+
+  const spendReply = await service.handleTextCommand({
+    telegramUserId: "777",
+    text: "/spend coffee"
+  });
+  const paylinkId = spendReply.match(/Receipt\n(pl_\S+)/)?.[1];
+  assert.ok(paylinkId);
+
+  const signature = "5".repeat(88);
+  await paylinkService.confirmManualAgentSpend({
+    paylinkId,
+    txSignature: signature,
+    executor: "solana-devnet-native-fallback",
+    executionRail: "solana-devnet-native-fallback",
+    mirageAttempted: true,
+    mirageError: "Invalid param WrongSize"
+  });
+
+  const reply = await service.handleTextCommand({
+    telegramUserId: "777",
+    text: `/receipt ${paylinkId}`
+  });
+
+  assert.match(reply, /✅ Execution Confirmed/);
+  assert.match(reply, /Execution Rail\nSolana Native Devnet Fallback/);
+  assert.match(reply, /Policy Decision\nApproved by Spend Firewall/);
+  assert.match(reply, /Tx Signature\n55555555\.\.\.55555555/);
+  assert.match(reply, new RegExp(`Explorer\\nhttps://explorer\\.solana\\.com/tx/${signature}\\?cluster=devnet`));
+  assert.match(reply, new RegExp(`Receipt ID\\n${paylinkId}`));
 });
 
 test("telegram webhook command modules do not import local execution helpers", async () => {

@@ -503,11 +503,18 @@ test("worker confirmation sends Telegram notification when metadata exists", asy
   assert.equal(result.confirmed, 1);
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0]?.chatId, "987654321");
-  assert.match(sentMessages[0]?.text ?? "", /Execution confirmed/);
-  assert.match(sentMessages[0]?.text ?? "", /Agent: coffee-agent/);
-  assert.match(sentMessages[0]?.text ?? "", /Amount: 5 USDC/);
-  assert.match(sentMessages[0]?.text ?? "", new RegExp(`Devnet tx: ${VALID_SIGNATURE}`));
-  assert.match(sentMessages[0]?.text ?? "", /Receipt: confirmed/);
+  assert.match(sentMessages[0]?.text ?? "", /✅ Execution Confirmed/);
+  assert.match(sentMessages[0]?.text ?? "", /Agent\ncoffee-agent/);
+  assert.match(sentMessages[0]?.text ?? "", /Amount\n5 USDC/);
+  assert.match(sentMessages[0]?.text ?? "", /Execution Rail\nMirage Private Rail/);
+  assert.match(sentMessages[0]?.text ?? "", /Policy Decision\nApproved by Spend Firewall/);
+  assert.match(sentMessages[0]?.text ?? "", /Tx Signature\n55555555\.\.\.55555555/);
+  assert.match(
+    sentMessages[0]?.text ?? "",
+    new RegExp(`Explorer\\nhttps://explorer\\.solana\\.com/tx/${VALID_SIGNATURE}\\?cluster=devnet`)
+  );
+  assert.match(sentMessages[0]?.text ?? "", /Receipt ID\npl_worker_paylink/);
+  assert.match(sentMessages[0]?.text ?? "", /Status\nConfirmed/);
   assert.ok(logs.includes("Telegram notification: sent"));
 });
 
@@ -888,11 +895,31 @@ test("worker fallback receipt sends Telegram fallback confirmation text", async 
   assert.equal(
     sentMessages[0]?.text,
     [
-      "Execution confirmed",
-      "Rail: Solana devnet native fallback",
-      "Display spend: 5 USDC",
-      "Mirage command: attempted",
-      `Tx: ${fallbackSignature}`
+      "✅ Execution Confirmed",
+      "",
+      "Agent",
+      "coffee-agent",
+      "",
+      "Amount",
+      "5 USDC",
+      "",
+      "Execution Rail",
+      "Solana Native Devnet Fallback",
+      "",
+      "Policy Decision",
+      "Approved by Spend Firewall",
+      "",
+      "Tx Signature",
+      "77777777...77777777",
+      "",
+      "Explorer",
+      `https://explorer.solana.com/tx/${fallbackSignature}?cluster=devnet`,
+      "",
+      "Receipt ID",
+      "pl_worker_paylink",
+      "",
+      "Status",
+      "Confirmed"
     ].join("\n")
   );
 });

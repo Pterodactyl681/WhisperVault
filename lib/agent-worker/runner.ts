@@ -251,6 +251,12 @@ const formatMintLabel = (mint: string): string => {
   return mint.trim() || "USDC";
 };
 
+const formatShortSignature = (signature: string): string =>
+  signature.length <= 16 ? signature : `${signature.slice(0, 8)}...${signature.slice(-8)}`;
+
+const formatSolanaExplorerDevnetLink = (signature: string): string =>
+  `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
+
 const buildTelegramConfirmationMessage = (
   spend: PendingAgentSpendExecution,
   txSignature: string,
@@ -261,20 +267,60 @@ const buildTelegramConfirmationMessage = (
 ): string => {
   if (metadata?.executionRail === "solana-devnet-native-fallback") {
     return [
-      "Execution confirmed",
-      "Rail: Solana devnet native fallback",
-      `Display spend: ${spend.amount} ${formatMintLabel(spend.mint)}`,
-      `Mirage command: ${metadata.mirageAttempted ? "attempted" : "not attempted"}`,
-      `Tx: ${txSignature}`
+      "✅ Execution Confirmed",
+      "",
+      "Agent",
+      spend.agentId,
+      "",
+      "Amount",
+      `${spend.amount} ${formatMintLabel(spend.mint)}`,
+      "",
+      "Execution Rail",
+      "Solana Native Devnet Fallback",
+      "",
+      "Policy Decision",
+      "Approved by Spend Firewall",
+      "",
+      "Tx Signature",
+      formatShortSignature(txSignature),
+      "",
+      "Explorer",
+      formatSolanaExplorerDevnetLink(txSignature),
+      "",
+      "Receipt ID",
+      spend.paylinkId,
+      "",
+      "Status",
+      "Confirmed"
     ].join("\n");
   }
 
   return [
-    "Execution confirmed",
-    `Agent: ${spend.agentId}`,
-    `Amount: ${spend.amount} ${formatMintLabel(spend.mint)}`,
-    `Devnet tx: ${txSignature}`,
-    "Receipt: confirmed"
+    "✅ Execution Confirmed",
+    "",
+    "Agent",
+    spend.agentId,
+    "",
+    "Amount",
+    `${spend.amount} ${formatMintLabel(spend.mint)}`,
+    "",
+    "Execution Rail",
+    "Mirage Private Rail",
+    "",
+    "Policy Decision",
+    "Approved by Spend Firewall",
+    "",
+    "Tx Signature",
+    formatShortSignature(txSignature),
+    "",
+    "Explorer",
+    formatSolanaExplorerDevnetLink(txSignature),
+    "",
+    "Receipt ID",
+    spend.paylinkId,
+    "",
+    "Status",
+    "Confirmed"
   ].join("\n");
 };
 
