@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { AgentBudgetService } from "../lib/agent-budget/service";
 import { OffchainAgentBudgetPolicyAdapter } from "../lib/agent-budget/policy-adapter";
+import { listPendingAgentSpendExecutions } from "../lib/agent-spend/pending-execution";
 import { TelegramCommandService } from "../lib/telegram/commands";
 import { InMemoryTelegramLinkRepository } from "../lib/telegram-link/repository";
 import { TelegramLinkService } from "../lib/telegram-link/service";
@@ -242,7 +243,7 @@ test("/agents lists active agent vaults and /agent use switches spend context", 
   });
 
   assert.match(agentsReply, /🧠 Active Agents/);
-  assert.match(agentsReply, /● coffee-agent\nGhost: 10\/20\nDaily left: 30/);
+  assert.match(agentsReply, /● coffee-agent  Active\nGhost: 10\/20\nDaily left: 30/);
   assert.match(agentsReply, /● travel-agent\nGhost: 5\/10\nDaily left: 60/);
   assert.match(agentsReply, /● shopping-agent\nGhost: 0\/15\nPaused/);
 
@@ -262,22 +263,33 @@ test("/agents lists active agent vaults and /agent use switches spend context", 
   assert.match(spendReply, /Agent\ntravel-agent/);
 });
 
-test("/rogue renders simulator without creating execution artifacts", async () => {
-  const { service, telegramLinkService, paylinkService } = await createHarness();
+test("/rogue dry-run does not create execution artifacts or mutate budget", async () => {
+  const { service, telegramLinkService, paylinkService, budgetService } = await createHarness();
   await linkTelegramUser(telegramLinkService);
+  const before = await budgetService.getAgentBudget("coffee-agent");
 
   const reply = await service.handleTextCommand({
     telegramUserId: "777",
     text: "/rogue"
   });
+  const after = await budgetService.getAgentBudget("coffee-agent");
+  const pending = await listPendingAgentSpendExecutions({ paylinkService });
 
   assert.match(reply, /👾 Rogue Agent Simulator/);
-  assert.match(reply, /Attempt 1/);
-  assert.match(reply, /✅ Approved/);
-  assert.match(reply, /Ghost Allowance exceeded/);
-  assert.match(reply, /Private rail policy enforced/);
-  assert.match(reply, /Unsafe executions prevented: 3/);
+  assert.match(reply, /Agent: coffee-agent/);
+  assert.match(reply, /Mode: dry-run/);
+  assert.match(reply, /Execution: disabled/);
+  assert.match(reply, /Attempt 1\n1 USDC — buy coffee\nResult: Approved\nReason: Within Spend Firewall policy/);
+  assert.match(reply, /Attempt 2\n30 USDC — buy gear\nResult: Blocked\nReason: Ghost Allowance exceeded/);
+  assert.match(reply, /Attempt 3\n100 USDC — buy laptop\nResult: Blocked\nReason: Daily cap exceeded/);
+  assert.match(reply, /Attempt 4\n5 USDC — invalid recipient\nResult: Blocked\nReason: Recipient policy denied/);
+  assert.match(reply, /Attempt 5\n5 USDC — public transfer attempt\nResult: Blocked\nReason: Private rail policy enforced/);
+  assert.match(reply, /Summary:\nSafe requests approved: 1\nUnsafe requests blocked: 4\nUnsafe executions generated: 0/);
+  assert.doesNotMatch(reply, /mirage transfer/i);
   assert.equal((await paylinkService.listPaymentIntents()).length, 0);
+  assert.equal(pending.length, 0);
+  assert.equal(after?.liveAllowance, before?.liveAllowance);
+  assert.equal(after?.spentToday, before?.spentToday);
 });
 
 test("/receipt rejects unauthorized paylink access", async () => {

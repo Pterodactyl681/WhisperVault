@@ -49,6 +49,7 @@ interface CreatePaymentIntentInput {
 
 interface CreateAgentPlanArtifactsInput {
   agentId: string;
+  controllerWallet?: string;
   requestedGoal: string;
   category?: string;
   amount: string;
@@ -192,6 +193,7 @@ export class WhisperPayServerService {
 
     const agentPlanMetadata: AgentPlanMetadata = {
       agentId: input.agentId,
+      ...(input.controllerWallet ? { controllerWallet: input.controllerWallet } : {}),
       requestedGoal: input.requestedGoal,
       rail: input.rail,
       privacyMode: "private",

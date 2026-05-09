@@ -1,0 +1,467 @@
+import type { AgentBudget, AgentBudgetPolicyAdapter, CreateAgentBudgetInput } from "../agent-budget";
+import { DEFAULT_DEMO_AGENT_MINT, DEFAULT_DEMO_AGENT_OWNER, DEFAULT_DEMO_AGENT_RECIPIENT } from "../agent-budget/demo-constants";
+import { createAgentPlanHttpHandlers } from "../agent-plan/http";
+import { AGENT_BUDGET_OWNER_HEADER, errorResponse, handleKnownError, json, parseJsonObject, readOwnerHeader } from "../agent-vault/http";
+import type { AgentRegistryService } from "../agent-registry/service";
+import type { AgentRecipient, RegisteredAgent } from "../agent-registry/types";
+import type { GhostTabService } from "../ghost-tab/service";
+import type { GhostTabSnapshot } from "../ghost-tab/types";
+import type { ServerPaymentIntent, WhisperPayServerService } from "../whisperpay-server";
+
+interface CommandCenterHttpOptions {
+  registryService: AgentRegistryService;
+  budgetPolicy: AgentBudgetPolicyAdapter;
+  paylinkService: WhisperPayServerService;
+  ghostTabService?: GhostTabService;
+  demoControllerWallet?: string;
+}
+
+interface CommandCenterHttpHandlers {
+  listAgents: (request: Request) => Promise<Response>;
+  createAgent: (request: Request) => Promise<Response>;
+  useAgent: (request: Request) => Promise<Response>;
+  listRecipients: (request: Request) => Promise<Response>;
+  addRecipient: (request: Request) => Promise<Response>;
+  useRecipient: (request: Request) => Promise<Response>;
+  listReceipts: (request: Request) => Promise<Response>;
+  createSpendIntent: (request: Request) => Promise<Response>;
+}
+
+type AgentPlanPayload = {
+  allowed?: boolean;
+  reason?: string;
+  paylinkId?: string;
+  rail?: string;
+  receipt?: unknown;
+};
+
+const normalizeAgentName = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+const normalizeAmount = (value: unknown): string => {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+    return String(value);
+  }
+
+  if (typeof value === "string" && /^\d+$/.test(value.trim()) && value.trim() !== "0") {
+    return value.trim();
+  }
+
+  throw new Error("amount must be a positive integer.");
+};
+
+const readControllerWallet = (request: Request, body?: Record<string, unknown>, fallback = DEFAULT_DEMO_AGENT_OWNER): string => {
+  const headerOwner = readOwnerHeader(request);
+  const bodyOwner = typeof body?.controllerWallet === "string" ? body.controllerWallet.trim() : "";
+  return headerOwner ?? (bodyOwner || fallback);
+};
+
+const calculateDailyLeft = (agent: RegisteredAgent): string => {
+  const dailyCap = BigInt(agent.dailyCap);
+  const spent = BigInt(agent.currentDailySpent);
+  return dailyCap > spent ? (dailyCap - spent).toString() : "0";
+};
+
+const formatPolicyReason = (reason: string): string => {
+  if (/live Ghost Allowance/i.test(reason)) {
+    return "Ghost Allowance exceeded";
+  }
+
+  if (/remaining daily cap/i.test(reason)) {
+    return "Daily cap exceeded";
+  }
+
+  return reason.replace(/\.$/, "");
+};
+
+const explorerUrl = (signature: string | null | undefined): string | null =>
+  signature ? `https://explorer.solana.com/tx/${signature}?cluster=devnet` : null;
+
+const shortSignature = (signature: string | null | undefined): string | null =>
+  signature ? `${signature.slice(0, 6)}...${signature.slice(-6)}` : null;
+
+const railLabel = (rail: string | null | undefined): string => {
+  if (!rail) {
+    return "Private Rail";
+  }
+
+  if (rail === "solana-devnet-native-fallback" || /native/i.test(rail)) {
+    return "Solana Devnet Native Fallback";
+  }
+
+  if (rail === "magicblock-private" || rail === "magicblock-private-spl") {
+    return "MagicBlock Private Rail";
+  }
+
+  return rail;
+};
+
+const serializeGhostTab = (snapshot?: GhostTabSnapshot | null) => {
+  if (!snapshot?.session) {
+    return null;
+  }
+
+  const session = snapshot.session;
+  const nextRefillAt =
+    session.status === "active"
+      ? new Date(Date.parse(session.lastRefillAt) + session.refillIntervalMinutes * 60 * 1000).toISOString()
+      : null;
+
+  return {
+    ...session,
+    nextRefillAt,
+    events: snapshot.events.slice(-8).reverse()
+  };
+};
+
+const serializeAgent = (agent: RegisteredAgent, isActive: boolean, ghostTab?: GhostTabSnapshot | null) => ({
+  ...agent,
+  isActive,
+  dailyLeft: calculateDailyLeft(agent),
+  hasApiToken: Boolean(agent.apiTokenHash),
+  ghostTab: serializeGhostTab(ghostTab)
+});
+
+const serializeRecipient = (recipient: AgentRecipient, activeAgent: RegisteredAgent | null) => ({
+  ...recipient,
+  isDefaultForActiveAgent: Boolean(activeAgent?.defaultRecipientLabel && recipient.label === activeAgent.defaultRecipientLabel),
+  isAllowedForActiveAgent: !recipient.agentId || recipient.agentId === activeAgent?.id
+});
+
+const receiptBelongsToController = (
+  paymentIntent: ServerPaymentIntent,
+  controllerWallet: string,
+  ownedAgentIds: Set<string>
+): boolean => {
+  const agentPlan = paymentIntent.metadata?.agentPlan;
+
+  if (!agentPlan) {
+    return false;
+  }
+
+  return agentPlan.controllerWallet === controllerWallet || ownedAgentIds.has(agentPlan.agentId);
+};
+
+const serializeReceipt = (paymentIntent: ServerPaymentIntent) => {
+  const agentPlan = paymentIntent.metadata?.agentPlan;
+  const executionRail =
+    paymentIntent.metadata?.manualExecution?.executionRail ??
+    agentPlan?.privateRail?.settlementRail ??
+    agentPlan?.rail ??
+    paymentIntent.settlementRail;
+  const signature = paymentIntent.txSignature ?? paymentIntent.metadata?.manualExecution?.txSignature ?? null;
+  const confirmedAt = paymentIntent.metadata?.manualExecution?.confirmedAt ?? null;
+  const lifecycleState = paymentIntent.metadata?.agentLifecycle?.budgetReservationState;
+  const status = signature || lifecycleState === "confirmed" ? "confirmed" : paymentIntent.status === "pending" ? "pending" : paymentIntent.status;
+
+  return {
+    id: paymentIntent.id,
+    paylinkId: paymentIntent.paylinkId,
+    agentId: agentPlan?.agentId ?? "unknown-agent",
+    agent: agentPlan?.agentId ?? "unknown-agent",
+    goal: agentPlan?.requestedGoal ?? null,
+    amount: paymentIntent.amount,
+    mint: paymentIntent.mint,
+    requestedAmount: paymentIntent.amount,
+    status,
+    executionRail,
+    settlementRailLabel: railLabel(executionRail),
+    txSignature: signature,
+    txSignatureShort: shortSignature(signature),
+    explorerUrl: explorerUrl(signature),
+    createdAt: paymentIntent.createdAt,
+    confirmedAt,
+    recipient: paymentIntent.recipient
+  };
+};
+
+export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOptions): CommandCenterHttpHandlers => {
+  const demoControllerWallet = options.demoControllerWallet ?? DEFAULT_DEMO_AGENT_OWNER;
+
+  const loadAgentState = async (controllerWallet: string) => {
+    const budgets = await options.budgetPolicy.listBudgets();
+    const ownedBudgets = budgets.filter((budget) => budget.owner === controllerWallet);
+    const agents = await options.registryService.listAgents(controllerWallet, ownedBudgets);
+    const activeAgent = await options.registryService.getActiveAgent(controllerWallet, ownedBudgets);
+    const ghostTabs = new Map<string, GhostTabSnapshot>();
+
+    if (options.ghostTabService) {
+      for (const budget of ownedBudgets) {
+        await options.ghostTabService.ensureSessionForBudget(budget);
+        ghostTabs.set(budget.agentId, await options.ghostTabService.getSnapshot(budget.agentId));
+      }
+    }
+
+    return {
+      budgets,
+      ownedBudgets,
+      agents,
+      activeAgent,
+      ghostTabs
+    };
+  };
+
+  const findAgentForRequest = async (controllerWallet: string, value: unknown): Promise<RegisteredAgent> => {
+    const normalized = typeof value === "string" ? normalizeAgentName(value) : "";
+    const { agents } = await loadAgentState(controllerWallet);
+    const agent = agents.find((candidate) => candidate.id === normalized || candidate.name === normalized);
+
+    if (!agent) {
+      throw new Error(`Agent "${normalized || "unknown"}" was not found.`);
+    }
+
+    return agent;
+  };
+
+  return {
+    listAgents: async (request) => {
+      try {
+        const controllerWallet = readControllerWallet(request, undefined, demoControllerWallet);
+        const { agents, activeAgent, ghostTabs } = await loadAgentState(controllerWallet);
+
+        return json({
+          controllerWallet,
+          activeAgentId: activeAgent?.id ?? null,
+          agents: agents.map((agent) => serializeAgent(agent, agent.id === activeAgent?.id, ghostTabs.get(agent.id)))
+        });
+      } catch (error) {
+        return handleKnownError(error);
+      }
+    },
+
+    createAgent: async (request) => {
+      try {
+        const body = await parseJsonObject(request);
+        const controllerWallet = readControllerWallet(request, body, demoControllerWallet);
+        const name = typeof body.name === "string" ? normalizeAgentName(body.name) : "";
+
+        if (!name) {
+          throw new Error("name is required.");
+        }
+
+        const totalBudget = normalizeAmount(body.totalBudget ?? "100");
+        const maxLiveAllowance = normalizeAmount(body.ghostAllowanceMax ?? "20");
+        const liveAllowance = normalizeAmount(body.ghostAllowanceLive ?? maxLiveAllowance);
+        const refillAmount = normalizeAmount(body.ghostRefillAmount ?? "5");
+        const refillIntervalMinutes =
+          typeof body.ghostRefillIntervalMinutes === "number" && Number.isInteger(body.ghostRefillIntervalMinutes)
+            ? body.ghostRefillIntervalMinutes
+            : 10;
+        const budgetInput: CreateAgentBudgetInput = {
+          agentId: name,
+          owner: controllerWallet,
+          agentWallet: `agent:${name}`,
+          mint: typeof body.mint === "string" && body.mint.trim() ? body.mint.trim() : DEFAULT_DEMO_AGENT_MINT,
+          totalBudget,
+          currentBalance: totalBudget,
+          dailyCapPercent:
+            typeof body.dailyCapPercent === "number" && Number.isInteger(body.dailyCapPercent) ? body.dailyCapPercent : 30,
+          rail: "magicblock-private",
+          allowPublicFallback: false,
+          allowanceMode: "rolling",
+          liveAllowance,
+          maxLiveAllowance,
+          refillAmount,
+          refillIntervalMinutes,
+          metadata: {
+            source: "web-command-center"
+          }
+        };
+        const budget = await options.budgetPolicy.createBudget(budgetInput);
+        const agent = await options.registryService.createAgent({
+          id: budget.agentId,
+          name,
+          controllerWallet,
+          budget,
+          executionMode: "mirage-private-first"
+        });
+
+        await options.registryService.setActiveAgent(controllerWallet, agent.id);
+
+        return json(
+          {
+            controllerWallet,
+            agent: serializeAgent(agent, true, options.ghostTabService ? await options.ghostTabService.getSnapshot(agent.id) : null)
+          },
+          201
+        );
+      } catch (error) {
+        return handleKnownError(error);
+      }
+    },
+
+    useAgent: async (request) => {
+      try {
+        const body = await parseJsonObject(request);
+        const controllerWallet = readControllerWallet(request, body, demoControllerWallet);
+        const agent = await findAgentForRequest(controllerWallet, body.agentId ?? body.name);
+        await options.registryService.setActiveAgent(controllerWallet, agent.id);
+
+        return json({
+          controllerWallet,
+          activeAgentId: agent.id,
+          agent: serializeAgent(agent, true, options.ghostTabService ? await options.ghostTabService.getSnapshot(agent.id) : null)
+        });
+      } catch (error) {
+        return handleKnownError(error);
+      }
+    },
+
+    listRecipients: async (request) => {
+      try {
+        const controllerWallet = readControllerWallet(request, undefined, demoControllerWallet);
+        const { activeAgent } = await loadAgentState(controllerWallet);
+        const recipients = await options.registryService.listRecipients(controllerWallet);
+
+        return json({
+          controllerWallet,
+          activeAgentId: activeAgent?.id ?? null,
+          activeRecipientLabel: activeAgent?.defaultRecipientLabel ?? null,
+          activeRecipientAddress: activeAgent?.defaultRecipientAddress ?? null,
+          recipients: recipients.map((recipient) => serializeRecipient(recipient, activeAgent))
+        });
+      } catch (error) {
+        return handleKnownError(error);
+      }
+    },
+
+    addRecipient: async (request) => {
+      try {
+        const body = await parseJsonObject(request);
+        const controllerWallet = readControllerWallet(request, body, demoControllerWallet);
+        const label = typeof body.label === "string" ? body.label : "";
+        const address = typeof body.address === "string" ? body.address : "";
+        const agentId = typeof body.agentId === "string" && body.agentId.trim() ? body.agentId.trim() : null;
+        const recipient = await options.registryService.addRecipient(controllerWallet, label, address, agentId);
+
+        return json(
+          {
+            controllerWallet,
+            recipient
+          },
+          201
+        );
+      } catch (error) {
+        return handleKnownError(error);
+      }
+    },
+
+    useRecipient: async (request) => {
+      try {
+        const body = await parseJsonObject(request);
+        const controllerWallet = readControllerWallet(request, body, demoControllerWallet);
+        const { activeAgent } = await loadAgentState(controllerWallet);
+
+        if (!activeAgent) {
+          throw new Error("Active agent was not found.");
+        }
+
+        const label = typeof body.label === "string" ? body.label : "";
+        const agent = await options.registryService.setDefaultRecipient(controllerWallet, activeAgent.id, label);
+
+        return json({
+          controllerWallet,
+          activeAgentId: agent.id,
+          activeRecipientLabel: agent.defaultRecipientLabel ?? null,
+          activeRecipientAddress: agent.defaultRecipientAddress ?? null,
+          agent: serializeAgent(agent, true, options.ghostTabService ? await options.ghostTabService.getSnapshot(agent.id) : null)
+        });
+      } catch (error) {
+        return handleKnownError(error);
+      }
+    },
+
+    listReceipts: async (request) => {
+      try {
+        const controllerWallet = readControllerWallet(request, undefined, demoControllerWallet);
+        const { agents } = await loadAgentState(controllerWallet);
+        const ownedAgentIds = new Set(agents.map((agent) => agent.id));
+        const receipts = (await options.paylinkService.listPaymentIntents())
+          .filter((paymentIntent) => receiptBelongsToController(paymentIntent, controllerWallet, ownedAgentIds))
+          .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+          .map(serializeReceipt);
+
+        return json({
+          controllerWallet,
+          receipts
+        });
+      } catch (error) {
+        return handleKnownError(error);
+      }
+    },
+
+    createSpendIntent: async (request) => {
+      try {
+        const body = await parseJsonObject(request);
+        const controllerWallet = readControllerWallet(request, body, demoControllerWallet);
+        const { activeAgent } = await loadAgentState(controllerWallet);
+
+        if (!activeAgent) {
+          throw new Error("Active agent was not found.");
+        }
+
+        const handlers = createAgentPlanHttpHandlers({
+          budgetService: options.budgetPolicy,
+          paylinkService: options.paylinkService
+        });
+        const recipient =
+          typeof body.recipient === "string" && body.recipient.trim()
+            ? body.recipient.trim()
+            : activeAgent.defaultRecipientAddress ?? DEFAULT_DEMO_AGENT_RECIPIENT;
+        const origin = new URL(request.url).origin;
+        const response = await handlers.createPlan(
+          new Request(`${origin}/api/agent-plan`, {
+            method: "POST",
+            headers: {
+              [AGENT_BUDGET_OWNER_HEADER]: controllerWallet,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              agentId: activeAgent.id,
+              goal: typeof body.goal === "string" ? body.goal : "",
+              amount: normalizeAmount(body.amount),
+              mint: typeof body.mint === "string" && body.mint.trim() ? body.mint.trim() : DEFAULT_DEMO_AGENT_MINT,
+              recipient,
+              rail: activeAgent.preferredRail
+            })
+          })
+        );
+        const payload = (await response.json()) as AgentPlanPayload;
+
+        if (payload.allowed === false) {
+          return json({
+            decision: "blocked",
+            reason: formatPolicyReason(payload.reason ?? "Spend rejected by policy."),
+            agent: activeAgent.name,
+            agentId: activeAgent.id,
+            receipt: payload.receipt
+          });
+        }
+
+        if (payload.allowed !== true || !payload.paylinkId) {
+          return errorResponse(500, "intent_failed", "Spend intent could not be created.");
+        }
+
+        return json(
+          {
+            decision: "approved",
+            agent: activeAgent.name,
+            agentId: activeAgent.id,
+            paylinkId: payload.paylinkId,
+            status: "pending_execution",
+            rail: payload.rail ?? activeAgent.preferredRail,
+            recipient
+          },
+          201
+        );
+      } catch (error) {
+        return handleKnownError(error);
+      }
+    }
+  };
+};

@@ -787,6 +787,18 @@ WhisperVault is intentionally explicit about what is live, what is devnet, and w
 
 ---
 
+## Bring Your Own Agent
+
+Telegram is only one interface for WhisperVault. External AI agents can connect through `POST /api/agent/intents` with a per-agent bearer token.
+
+Controllers can create and switch agents with `/agent create <name>`, `/agents`, and `/agent use <name>`. Each agent keeps its own Spend Firewall policy, daily spend state, Ghost Allowance, active recipient, and optional API token. Generate a token with `/agent token <name>`; WhisperVault stores only the token hash, so the bearer token is shown once.
+
+External agents submit a goal, amount, mint, and recipient. WhisperVault resolves the agent from the token, runs the Spend Firewall and Ghost Allowance checks, and either creates a pending private execution or returns a blocked decision with the policy reason.
+
+Mirage Private Rail is attempted first by the worker. Native Fallback remains the confirmed devnet settlement path when configured, using the existing worker confirmation flow.
+
+---
+
 ## Summary
 
 **WhisperVault is an Agent Spend Firewall for private AI payments.**

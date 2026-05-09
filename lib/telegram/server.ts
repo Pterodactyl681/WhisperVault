@@ -1,4 +1,6 @@
 import { agentBudgetPolicyAdapter } from "@/lib/agent-budget/server";
+import { agentRegistryService } from "@/lib/agent-registry/server";
+import { ghostTabService } from "@/lib/ghost-tab/server";
 import { telegramLinkService } from "@/lib/telegram-link/server";
 import { whisperPayServerService } from "@/lib/whisperpay-server/server";
 import { createTelegramBotClient, type TelegramBotClient } from "./client";
@@ -15,7 +17,9 @@ export const telegramCommandService =
   new TelegramCommandService({
     telegramLinkService,
     budgetPolicy: agentBudgetPolicyAdapter,
-    paylinkService: whisperPayServerService
+    paylinkService: whisperPayServerService,
+    agentRegistry: agentRegistryService,
+    ghostTabService
   });
 
 export const getTelegramBotToken = (env: NodeJS.ProcessEnv = process.env): string | null => {

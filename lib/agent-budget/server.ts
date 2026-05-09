@@ -4,6 +4,8 @@ import { DevFileAgentBudgetRepository, InMemoryAgentBudgetRepository } from "./r
 import { AgentBudgetService } from "./service";
 import { getAgentBudgetPolicyAdapter, type AgentBudgetPolicyAdapter } from "./policy-adapter";
 import { parseAgentBudgetPolicyConfig } from "./policy-config";
+import { ghostTabService } from "../ghost-tab/server";
+import { GhostTabPolicyAdapter } from "../ghost-tab/policy-adapter";
 
 type AgentBudgetGlobal = typeof globalThis & {
   __whisperPayAgentBudgetService?: AgentBudgetService;
@@ -30,12 +32,20 @@ export const agentBudgetService =
 
 export const agentBudgetPolicyConfig = parseAgentBudgetPolicyConfig();
 
-export const agentBudgetPolicyAdapter =
+const baseAgentBudgetPolicyAdapter =
   globalForAgentBudget.__whisperPayAgentBudgetPolicyAdapter?.mode === agentBudgetPolicyConfig.mode
     ? globalForAgentBudget.__whisperPayAgentBudgetPolicyAdapter
     : getAgentBudgetPolicyAdapter({
         config: agentBudgetPolicyConfig,
         service: agentBudgetService
+      });
+
+export const agentBudgetPolicyAdapter: AgentBudgetPolicyAdapter =
+  baseAgentBudgetPolicyAdapter instanceof GhostTabPolicyAdapter
+    ? baseAgentBudgetPolicyAdapter
+    : new GhostTabPolicyAdapter({
+        basePolicy: baseAgentBudgetPolicyAdapter,
+        ghostTabService
       });
 
 if (process.env.NODE_ENV !== "production") {

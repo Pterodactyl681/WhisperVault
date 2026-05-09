@@ -1,5 +1,5 @@
-import AgentBudgetsPageClient from "@/app/agent-budgets/page-client";
+import CommandCenterPageClient from "@/app/command-center/page-client";
 
 export default function HomePage() {
-  return <AgentBudgetsPageClient />;
+  return <CommandCenterPageClient />;
 }

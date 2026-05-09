@@ -43,6 +43,7 @@ export interface ServerTelegramSpendMetadata {
 
 export interface AgentPlanMetadata {
   agentId: string;
+  controllerWallet?: string;
   category?: string;
   requestedGoal: string;
   rail: AgentPlanRail;

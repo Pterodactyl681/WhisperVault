@@ -8,11 +8,18 @@ export interface PendingAgentSpendExecution {
   paylinkId: string;
   paymentIntentId: string;
   agentId: string;
+  controllerWallet: string;
   amount: string;
   mint: string;
+  requestedMint: string;
+  displayAmount: string;
   recipient: string;
   memo: string;
-  status: "pending/manual";
+  executionRail: "magicblock-private";
+  executionMode: "mirage-private-first";
+  txSignature: string | null;
+  confirmedAt: string | null;
+  status: "pending/manual" | "pending_execution";
   telegram?: ServerTelegramSpendMetadata;
   mirage: {
     command: "mirage";
@@ -75,11 +82,18 @@ export const toPendingAgentSpendExecution = (
     paylinkId: paymentIntent.paylinkId,
     paymentIntentId: paymentIntent.id,
     agentId: agentPlan.agentId,
+    controllerWallet: agentPlan.controllerWallet ?? paymentIntent.metadata?.telegram?.controllerWallet ?? paymentIntent.fromWallet,
     amount: paymentIntent.amount,
     mint: paymentIntent.mint,
+    requestedMint: paymentIntent.mint,
+    displayAmount: paymentIntent.amount,
     recipient: paymentIntent.recipient,
     memo,
-    status: "pending/manual",
+    executionRail: "magicblock-private",
+    executionMode: "mirage-private-first",
+    txSignature: paymentIntent.txSignature,
+    confirmedAt: paymentIntent.metadata?.manualExecution?.confirmedAt ?? null,
+    status: "pending_execution",
     ...(paymentIntent.metadata?.telegram ? { telegram: paymentIntent.metadata.telegram } : {}),
     mirage: {
       command: mirage.command,
