@@ -6,6 +6,7 @@ import { shortenAddress } from "../format";
 import { GhostTabService } from "../ghost-tab/service";
 import { isValidSolanaPublicKey } from "../solana-validation";
 import { TelegramLinkService } from "../telegram-link/service";
+import type { DemoReadinessService } from "../demo-readiness";
 import type { WhisperPayServerService } from "../whisperpay-server";
 import type { AgentBudget } from "../agent-budget";
 import type { ParsedTelegramCommand } from "./types";
@@ -17,6 +18,7 @@ interface TelegramCommandServiceOptions {
   paylinkService: WhisperPayServerService;
   agentRegistry?: AgentRegistryService;
   ghostTabService?: GhostTabService;
+  demoReadinessService?: DemoReadinessService;
   origin?: string;
 }
 
@@ -79,6 +81,8 @@ const HELP_TEXT = [
   "/ghost pause",
   "/ghost resume",
   "/ghost close",
+  "/demo reset",
+  "/demo status",
   "/spend 5 buy coffee",
   "/spend 100 buy gear",
   "/receipt <paylinkId>",
@@ -295,6 +299,8 @@ export class TelegramCommandService {
 
   private readonly ghostTabService: GhostTabService;
 
+  private readonly demoReadinessService?: DemoReadinessService;
+
   private readonly origin: string;
 
   private readonly activeAgentByTelegramUser = new Map<string, string>();
@@ -305,6 +311,7 @@ export class TelegramCommandService {
     this.paylinkService = options.paylinkService;
     this.agentRegistry = options.agentRegistry ?? new AgentRegistryService();
     this.ghostTabService = options.ghostTabService ?? new GhostTabService();
+    this.demoReadinessService = options.demoReadinessService;
     this.origin = options.origin ?? "http://localhost";
   }
 
@@ -335,6 +342,8 @@ export class TelegramCommandService {
         return this.handleRecipientsCommand(input.telegramUserId);
       case "ghost":
         return this.handleGhostCommand(input.telegramUserId, parsed);
+      case "demo":
+        return this.handleDemoCommand(input.telegramUserId, parsed);
       case "spend":
         return this.handleSpendCommand(input.telegramUserId, input.telegramChatId ?? null, text, parsed);
       case "receipt":
@@ -604,6 +613,54 @@ export class TelegramCommandService {
     }
 
     return ["Recipients", "", ...recipients.map((recipient) => `● ${recipient.label}\n${shortenAddress(recipient.address)}`)].join("\n\n");
+  }
+
+  private async handleDemoCommand(telegramUserId: string | null, command: ParsedTelegramCommand): Promise<string> {
+    const controllerWallet = await this.resolveLinkedControllerWallet(telegramUserId);
+
+    if (!controllerWallet) {
+      return this.renderLinkRequiredMessage();
+    }
+
+    if (!this.demoReadinessService) {
+      return "Demo readiness service is not available in this runtime.";
+    }
+
+    const action = command.args[0]?.trim().toLowerCase() || "status";
+
+    try {
+      if (action === "reset") {
+        const result = await this.demoReadinessService.reset(controllerWallet);
+        return [
+          "Demo state ready",
+          "",
+          `Active agent: ${result.activeAgent.name}`,
+          `Ghost Allowance: ${result.budget.liveAllowance}/${result.budget.maxLiveAllowance} ${formatMintLabel(result.budget.mint)}`,
+          `Recipient: ${result.recipient.displayLabel}`
+        ].join("\n");
+      }
+
+      if (action === "status") {
+        const status = await this.demoReadinessService.status(controllerWallet);
+        return [
+          "Demo Status",
+          "",
+          `Active agent: ${status.activeAgentName ?? "Not set"}`,
+          `Ghost Allowance: ${
+            status.ghostAllowanceLive && status.ghostAllowanceMax
+              ? `${status.ghostAllowanceLive}/${status.ghostAllowanceMax} USDC`
+              : "Not open"
+          }`,
+          `Recipient: ${status.recipientDisplayLabel ?? status.recipientLabel ?? "Not set"}`,
+          `Pending count: ${status.pendingCount}`,
+          `Last confirmed tx: ${formatShortSignature(status.lastConfirmedTx)}`
+        ].join("\n");
+      }
+
+      return "Usage: /demo reset\n/demo status";
+    } catch (error) {
+      return error instanceof Error ? error.message : "Demo command failed.";
+    }
   }
 
   private async handleGhostCommand(telegramUserId: string | null, command: ParsedTelegramCommand): Promise<string> {

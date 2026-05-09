@@ -310,6 +310,53 @@ export default function CommandCenterPageClient() {
     }
   };
 
+  const resetDemoState = async () => {
+    setIsSubmitting(true);
+
+    try {
+      const callReset = async (secret?: string | null) =>
+        fetch("/api/demo/reset", {
+          method: "POST",
+          headers: {
+            ...ownerHeaders,
+            "Content-Type": "application/json",
+            ...(secret ? { Authorization: `Bearer ${secret}` } : {})
+          },
+          body: JSON.stringify({
+            controllerWallet
+          })
+        });
+
+      let response = await callReset();
+
+      if (response.status === 401 && typeof window !== "undefined") {
+        const secret = window.prompt("Demo admin secret");
+
+        if (!secret) {
+          throw new Error("Demo reset requires an admin secret.");
+        }
+
+        response = await callReset(secret);
+      }
+
+      const payload = (await response.json()) as { error?: { message?: string }; activeAgent?: string; ghostAllowance?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "Demo state could not be reset.");
+      }
+
+      setNotice({
+        tone: "success",
+        message: `Demo state ready: ${payload.activeAgent ?? "coffee-agent"} (${payload.ghostAllowance ?? "20/20 USDC"})`
+      });
+      await loadData();
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Demo state could not be reset." });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -326,6 +373,10 @@ export default function CommandCenterPageClient() {
         </div>
         <div className="flex flex-wrap gap-2">
           {!wallet.connected ? <ConnectWalletButton label="Connect wallet" variant="secondary" /> : null}
+          <Button type="button" variant="secondary" onClick={() => void resetDemoState()} disabled={isSubmitting}>
+            <ShieldCheck className="h-4 w-4" />
+            Reset Demo State
+          </Button>
           <Button type="button" variant="outline" onClick={() => void loadData()} disabled={isLoading}>
             <RefreshCw className={cn("h-4 w-4", isLoading ? "animate-spin" : "")} />
             Refresh

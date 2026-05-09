@@ -32,6 +32,23 @@ interface AgentBudgetServiceOptions {
   now?: () => Date;
 }
 
+interface ResetAgentBudgetForDemoInput {
+  agentId: string;
+  owner: string;
+  agentWallet?: string;
+  mint?: string;
+  totalBudget?: AgentBudgetAmountInput;
+  currentBalance?: AgentBudgetAmountInput;
+  dailyCapPercent?: number;
+  spentToday?: AgentBudgetAmountInput;
+  liveAllowance?: AgentBudgetAmountInput;
+  maxLiveAllowance?: AgentBudgetAmountInput;
+  refillAmount?: AgentBudgetAmountInput;
+  refillIntervalMinutes?: number;
+  rail?: AgentBudget["rail"];
+  allowPublicFallback?: boolean;
+}
+
 interface NormalizedReservationReference {
   reference: string;
   paylinkId: string | null;
@@ -382,6 +399,52 @@ export class AgentBudgetService {
     const records = await this.repository.list();
     const normalized = await Promise.all(records.map((record) => this.normalizeRecord(record)));
     return normalized.map((record) => cloneBudget(record.budget));
+  }
+
+  async resetAgentBudgetForDemo(input: ResetAgentBudgetForDemoInput): Promise<AgentBudget> {
+    const now = this.now();
+    const record = await this.getRecordOrThrow(input.agentId);
+    const totalBudget = parseAmount(input.totalBudget ?? record.budget.totalBudget, "totalBudget");
+    const currentBalance = parseAmount(input.currentBalance ?? totalBudget.toString(), "currentBalance");
+    const liveAllowance = parseAmount(input.liveAllowance ?? record.budget.liveAllowance, "liveAllowance");
+    const maxLiveAllowance = parseAmount(input.maxLiveAllowance ?? record.budget.maxLiveAllowance, "maxLiveAllowance");
+    const agentWallet = input.agentWallet?.trim() || record.budget.agentWallet;
+    const nextBudget = normalizeBudgetAllowanceFields(
+      {
+        ...record.budget,
+        owner: assertNonEmptyString(input.owner, "owner"),
+        mint: assertNonEmptyString(input.mint ?? record.budget.mint, "mint"),
+        totalBudget: totalBudget.toString(),
+        currentBalance: currentBalance.toString(),
+        dailyCapPercent: normalizeDailyCapPercent(input.dailyCapPercent ?? record.budget.dailyCapPercent),
+        spentToday: parseAmount(input.spentToday ?? "0", "spentToday").toString(),
+        lastResetAt: now.toISOString(),
+        status: normalizeStatus("active", currentBalance),
+        rail: input.rail ?? record.budget.rail,
+        allowPublicFallback: input.allowPublicFallback ?? false,
+        allowanceMode: "rolling",
+        liveAllowance: minBigInt(liveAllowance, maxLiveAllowance).toString(),
+        maxLiveAllowance: maxLiveAllowance.toString(),
+        refillAmount: parseAmount(input.refillAmount ?? record.budget.refillAmount, "refillAmount").toString(),
+        refillIntervalMinutes: normalizePositiveInteger(
+          input.refillIntervalMinutes ?? record.budget.refillIntervalMinutes,
+          DEFAULT_REFILL_INTERVAL_MINUTES,
+          "refillIntervalMinutes"
+        ),
+        lastRefillAt: now.toISOString(),
+        sessionEndsAt: null,
+        clawbackOnSessionEnd: true,
+        ...(agentWallet ? { agentWallet } : {})
+      },
+      now
+    );
+
+    const saved = await this.repository.save({
+      budget: nextBudget,
+      reservations: []
+    });
+
+    return cloneBudget(saved.budget);
   }
 
   async canSpend(agentId: string, amount: AgentBudgetAmountInput): Promise<AgentBudgetSpendDecision> {

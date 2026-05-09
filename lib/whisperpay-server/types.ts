@@ -131,6 +131,10 @@ export interface ServerPaymentIntentMetadata {
   timeline?: ServerPaymentLifecycleEvent[];
   manualExecution?: ServerManualExecutionMetadata;
   telegram?: ServerTelegramSpendMetadata;
+  demoArchived?: {
+    at: string;
+    reason: "demo_archived";
+  };
 }
 
 export interface ServerPaymentIntent extends PublicPayment {
