@@ -53,6 +53,7 @@ body {
   font-family: "Popping-Cute", "Segoe UI", "Inter", "Noto Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei",
     "Helvetica Neue", Arial, ui-sans-serif, system-ui, sans-serif;
   background-image: linear-gradient(160deg, #070d18 0%, #0d1728 52%, #09101d 100%);
+  overflow-x: hidden;
   font-size: 1.01rem;
   line-height: 1.55;
   letter-spacing: 0.002em;
@@ -455,6 +456,22 @@ body {
   animation-name: tab-slide-fade-backward;
 }
 
+.command-center-section-transition {
+  animation: command-center-section-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform;
+}
+
+@keyframes command-center-section-in {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes tab-slide-fade-forward {
   0% {
     opacity: 0;
@@ -686,6 +703,10 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .tab-content-transition,
   .tab-content-transition[data-tab-direction="backward"] {
+    animation: none;
+  }
+
+  .command-center-section-transition {
     animation: none;
   }
 

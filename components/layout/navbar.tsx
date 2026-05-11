@@ -10,7 +10,7 @@ export function Navbar() {
   const setHomeTab = useWhisperPayStore((state) => state.setHomeTab);
   const pathname = usePathname();
 
-  if (pathname === "/" || pathname === "/agent-budgets" || pathname === "/agent-vaults") {
+  if (pathname === "/" || pathname === "/agent-budgets" || pathname === "/agent-vaults" || pathname === "/command-center") {
     return null;
   }
 

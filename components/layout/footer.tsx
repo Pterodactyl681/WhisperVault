@@ -1,11 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { BookOpenText, Github, Sparkles, Twitter } from "lucide-react";
 import Image from "next/image";
 import { appConfig } from "@/lib/app-config";
 
 export function Footer() {
+  const pathname = usePathname();
+
+  if (pathname === "/command-center") {
+    return null;
+  }
+
   return (
     <footer className="mt-auto w-full border-t border-[rgba(94,119,166,0.2)] bg-[rgba(9,16,29,0.78)] backdrop-blur-[12px]">
       <div className="mx-auto w-full max-w-6xl px-4 py-4 md:px-6">
