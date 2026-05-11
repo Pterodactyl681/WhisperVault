@@ -47,7 +47,6 @@ const GITHUB_URL = "https://github.com/Pterodactyl681/WhisperVault";
 const X_URL = "#";
 const DOCS_URL = "https://github.com/Pterodactyl681/WhisperVault#readme";
 const TELEGRAM_REFERENCE_BOT_URL = process.env.NEXT_PUBLIC_TELEGRAM_BOT_URL?.trim() ?? "";
-const AGENT_INTENTS_ENDPOINT = "https://whisper-vault-sigma.vercel.app/api/agent/intents";
 const formControlClass =
   "h-11 w-full min-w-0 rounded-lg border border-violet-200/12 bg-[#080812] px-3 text-[16px] text-white caret-violet-300 outline-none transition placeholder:text-zinc-600 focus:border-violet-400/55 focus:bg-[#0B0B17] focus:shadow-[0_0_0_3px_rgba(139,92,246,0.14)] disabled:cursor-not-allowed disabled:border-white/[0.06] disabled:bg-[#07070D] disabled:text-zinc-600 [color-scheme:dark]";
 
@@ -1058,7 +1057,6 @@ export default function CommandCenterPageClient() {
                 lastOnboardedAgentId={lastOnboardedAgentId}
                 generatedAgentToken={generatedAgentToken}
                 generateAgentToken={generateAgentToken}
-                setNotice={setNotice}
               />
             ) : null}
             {activeSection === "simulator" ? (
@@ -1580,8 +1578,7 @@ function AgentsSection({
   clearActiveAgent,
   lastOnboardedAgentId,
   generatedAgentToken,
-  generateAgentToken,
-  setNotice
+  generateAgentToken
 }: {
   agents: CommandCenterAgent[];
   isSubmitting: boolean;
@@ -1593,22 +1590,22 @@ function AgentsSection({
   lastOnboardedAgentId: string | null;
   generatedAgentToken: GeneratedAgentTokenState | null;
   generateAgentToken: (agentId: string) => void;
-  setNotice: (notice: Notice) => void;
 }) {
   const activeAgent = agents.find((agent) => agent.isActive) ?? null;
   const onboardingAgent = agents.find((agent) => agent.id === lastOnboardedAgentId) ?? activeAgent;
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
+    <div className="grid gap-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
       <Panel>
-        <PanelTitle>{dashboardSourceLabels.agentList}</PanelTitle>
-        {activeAgent ? (
-          <div className="mt-4 flex justify-end">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <PanelTitle>{dashboardSourceLabels.agentList}</PanelTitle>
+          {activeAgent ? (
             <ControlButton onClick={clearActiveAgent} disabled={isSubmitting}>
               Disconnect / Clear active agent
             </ControlButton>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
         <div className="mt-6 grid gap-3">
           {agents.map((agent) => (
             <div key={agent.id} className="rounded-lg border border-white/[0.08] bg-white/[0.025] p-4">
@@ -1617,7 +1614,7 @@ function AgentsSection({
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="truncate text-[18px] font-medium text-white">{agent.name}</div>
                     {agent.isActive ? <StatusBadge status="active">Active</StatusBadge> : null}
-                    <StatusBadge status={agent.status} />
+                    {!agent.isActive ? <StatusBadge status={agent.status} /> : null}
                   </div>
                   <div className="mt-2 text-[14px] text-zinc-500">{formatRail(agent.executionMode)}</div>
                 </div>
@@ -1629,10 +1626,6 @@ function AgentsSection({
                   <ControlButton disabled={agent.isActive || isSubmitting} onClick={() => useAgent(agent.id)}>
                     Set Active Vault
                   </ControlButton>
-                  <ControlButton disabled title="No web token generation endpoint is exposed.">
-                    <KeyRound className="h-3.5 w-3.5" />
-                    API Token
-                  </ControlButton>
                 </div>
               </div>
             </div>
@@ -1641,31 +1634,29 @@ function AgentsSection({
         </div>
       </Panel>
 
-      <div className="grid gap-4">
-        <Panel>
-          <PanelTitle>Add Agent Vault</PanelTitle>
-          <p className="mt-4 text-[15px] text-zinc-400">
-            Adding an Agent Vault creates policy and limits. The agent becomes connected when it uses Telegram or the API token to submit spend intents.
-          </p>
-          <form className="mt-6 space-y-3" onSubmit={createAgent}>
-            <StyledInput value={newAgentName} onChange={(event) => setNewAgentName(event.target.value)} placeholder="agent vault name" aria-label="New Agent Vault name" />
-            <ControlButton type="submit" disabled={isSubmitting} className="w-full justify-center">
-              <Plus className="h-4 w-4" />
-              Add Agent Vault
-            </ControlButton>
-          </form>
-        </Panel>
-
-        {agents.length > 0 ? (
-          <ConnectAgentPanel
-            agent={onboardingAgent}
-            isSubmitting={isSubmitting}
-            generatedAgentToken={generatedAgentToken}
-            generateAgentToken={generateAgentToken}
-            setNotice={setNotice}
-          />
-        ) : null}
+      <Panel>
+        <PanelTitle>Add Agent Vault</PanelTitle>
+        <p className="mt-4 text-[15px] leading-6 text-zinc-400">
+          Create policy and limits for a spend-capable agent vault.
+        </p>
+        <form className="mt-6 space-y-3" onSubmit={createAgent}>
+          <StyledInput value={newAgentName} onChange={(event) => setNewAgentName(event.target.value)} placeholder="agent vault name" aria-label="New Agent Vault name" />
+          <ControlButton type="submit" disabled={isSubmitting} className="w-full justify-center">
+            <Plus className="h-4 w-4" />
+            Add Agent Vault
+          </ControlButton>
+        </form>
+      </Panel>
       </div>
+
+      {agents.length > 0 ? (
+        <ConnectAgentPanel
+          agent={onboardingAgent}
+          isSubmitting={isSubmitting}
+          generatedAgentToken={generatedAgentToken}
+          generateAgentToken={generateAgentToken}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1674,62 +1665,34 @@ function ConnectAgentPanel({
   agent,
   isSubmitting,
   generatedAgentToken,
-  generateAgentToken,
-  setNotice
+  generateAgentToken
 }: {
   agent: CommandCenterAgent | null;
   isSubmitting: boolean;
   generatedAgentToken: GeneratedAgentTokenState | null;
   generateAgentToken: (agentId: string) => void;
-  setNotice: (notice: Notice) => void;
 }) {
   const agentName = agent?.name ?? "agent-name";
   const token = generatedAgentToken && generatedAgentToken.agentId === agent?.id ? generatedAgentToken.token : "<token>";
-  const curlExample = [
-    `curl -X POST ${AGENT_INTENTS_ENDPOINT}`,
-    `  -H "Authorization: Bearer ${token}"`,
-    `  -H "Content-Type: application/json"`,
-    `  -d "{\"goal\":\"buy coffee\",\"amount\":\"1\",\"mint\":\"USDC\",\"recipient\":\"<recipient-wallet>\"}"`
-  ].join(" \\\n");
-  const jsExample = [
-    `await fetch("${AGENT_INTENTS_ENDPOINT}", {`,
-    `  method: "POST",`,
-    `  headers: {`,
-    `    Authorization: "Bearer ${token}",`,
-    `    "Content-Type": "application/json"`,
-    `  },`,
-    `  body: JSON.stringify({`,
-    `    goal: "buy coffee",`,
-    `    amount: "1",`,
-    `    mint: "USDC",`,
-    `    recipient: "<recipient-wallet>"`,
-    `  })`,
-    `});`
-  ].join("\n");
   const telegramBotAvailable = TELEGRAM_REFERENCE_BOT_URL.length > 0;
-  const copySnippet = async (label: string, value: string) => {
-    const copied = await copyText(value);
-    setNotice({
-      tone: copied ? "success" : "warning",
-      message: copied ? `${label} copied.` : `${label} is ready to copy.`
-    });
-  };
 
   return (
     <Panel>
-      <PanelTitle>Connect Agent</PanelTitle>
-      <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap sm:items-center">
-        <StatusBadge status="active">Agent Vault ready</StatusBadge>
-        <StatusBadge status="pending">Connect your agent next</StatusBadge>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <PanelTitle>Connect Agent</PanelTitle>
+          <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap sm:items-center">
+            <StatusBadge status="active">Agent Vault ready</StatusBadge>
+            <StatusBadge status="pending">Connect your agent next</StatusBadge>
+          </div>
+        </div>
+        <AgentFlowStepper />
       </div>
-      <p className="mt-4 text-[15px] text-zinc-400">
-        Adding an Agent Vault creates policy and limits. The agent becomes connected when it uses Telegram or the API token to submit spend intents.
-      </p>
 
-      <div className="mt-5 grid gap-3">
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <ConnectionMethod
           title="Telegram Reference Agent"
-          detail="Use the Telegram bot to link this controller, select a vault, and submit a spend intent."
+          detail="Use the reference bot to select this vault and send a demo spend."
           action={
             <ControlButton asAnchor href={telegramBotAvailable ? TELEGRAM_REFERENCE_BOT_URL : "#"} disabled={!telegramBotAvailable} title={telegramBotAvailable ? "Open Telegram bot" : "Set NEXT_PUBLIC_TELEGRAM_BOT_URL to enable this link."}>
               <ExternalLink className="h-3.5 w-3.5" />
@@ -1737,14 +1700,14 @@ function ConnectAgentPanel({
             </ControlButton>
           }
           steps={[
-            <>Use <code className="text-violet-200">{`/agent use ${agentName}`}</code></>,
-            <>Use <code className="text-violet-200">/spend 1 buy coffee</code></>
+            <>Command: <code className="text-violet-200">{`/agent use ${agentName}`}</code></>,
+            <>Command: <code className="text-violet-200">/spend 1 buy coffee</code></>
           ]}
         />
 
         <ConnectionMethod
           title="BYO Agent API"
-          detail="Give a custom AI agent its own token, then submit spend intents through the controller API."
+          detail="External agents submit spend intents through this API."
           action={
             <ControlButton disabled={!agent || isSubmitting} onClick={() => agent ? generateAgentToken(agent.id) : undefined}>
               <KeyRound className="h-3.5 w-3.5" />
@@ -1752,10 +1715,9 @@ function ConnectAgentPanel({
             </ControlButton>
           }
           steps={[
-            <>POST <code className="text-violet-200">{AGENT_INTENTS_ENDPOINT}</code></>,
+            <>Endpoint: <code className="text-violet-200">/api/agent-spend</code></>,
             <>Authorization: <code className="text-violet-200">Bearer {token}</code></>,
-            <SnippetAction key="curl" label="Copy curl example" value={curlExample} onCopy={copySnippet} />,
-            <SnippetAction key="js" label="Copy JS example" value={jsExample} onCopy={copySnippet} />
+            <>Submit goal, amount, mint, and recipient.</>
           ]}
         />
       </div>
@@ -1763,20 +1725,20 @@ function ConnectAgentPanel({
   );
 }
 
-function SnippetAction({
-  label,
-  value,
-  onCopy
-}: {
-  label: string;
-  value: string;
-  onCopy: (label: string, value: string) => void;
-}) {
+function AgentFlowStepper() {
+  const steps = ["Create Agent Vault", "Connect via Telegram/API", "Submit spend intent"];
+
   return (
-    <button type="button" onClick={() => onCopy(label, value)} className="inline-flex items-center gap-2 text-violet-200 transition hover:text-white">
-      <Copy className="h-3.5 w-3.5" />
-      {label}
-    </button>
+    <div className="grid min-w-0 gap-2 text-[13px] text-zinc-300 sm:grid-cols-3 lg:min-w-[520px]">
+      {steps.map((step, index) => (
+        <div key={step} className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.025] px-3 py-2">
+          <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-violet-300/20 bg-violet-400/10 text-[12px] text-violet-200">
+            {index + 1}
+          </span>
+          <span className="min-w-0 leading-5">{step}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
