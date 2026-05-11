@@ -7,6 +7,7 @@ import { createPendingExecutionHttpHandlers } from "../lib/agent-spend/pending-e
 import { listPendingAgentSpendExecutions } from "../lib/agent-spend/pending-execution";
 import { WORKER_SECRET_HEADER } from "../lib/agent-spend/worker-auth";
 import { runAgentWorkerCliOnce, runAgentWorkerOnce, validateMirageTransferArgv } from "../lib/agent-worker";
+import { executeMagicBlockRail } from "../lib/execution-rails/magicblock";
 import type { TelegramBotClient } from "../lib/telegram/client";
 import { WhisperPayServerService } from "../lib/whisperpay-server/service";
 
@@ -127,6 +128,12 @@ const createWorkerFetch = async (paylinkService: WhisperPayServerService): Promi
         executionRail?: string;
         mirageAttempted?: boolean;
         mirageError?: string;
+        magicblockRailAttempted?: boolean;
+        magicblockRailMode?: string;
+        magicblockRailStatus?: string;
+        magicblockRailError?: string;
+        magicblockRailRawResponse?: unknown;
+        fallbackUsed?: boolean;
       };
       await paylinkService.confirmManualAgentSpend({
         paylinkId: body.paylinkId ?? "",
@@ -134,7 +141,13 @@ const createWorkerFetch = async (paylinkService: WhisperPayServerService): Promi
         executor: body.executor ?? "",
         ...(body.executionRail ? { executionRail: body.executionRail } : {}),
         ...(body.mirageAttempted !== undefined ? { mirageAttempted: body.mirageAttempted } : {}),
-        ...(body.mirageError ? { mirageError: body.mirageError } : {})
+        ...(body.mirageError ? { mirageError: body.mirageError } : {}),
+        ...(body.magicblockRailAttempted !== undefined ? { magicblockRailAttempted: body.magicblockRailAttempted } : {}),
+        ...(body.magicblockRailMode ? { magicblockRailMode: body.magicblockRailMode } : {}),
+        ...(body.magicblockRailStatus ? { magicblockRailStatus: body.magicblockRailStatus } : {}),
+        ...(body.magicblockRailError ? { magicblockRailError: body.magicblockRailError } : {}),
+        ...(body.magicblockRailRawResponse !== undefined ? { magicblockRailRawResponse: body.magicblockRailRawResponse } : {}),
+        ...(body.fallbackUsed !== undefined ? { fallbackUsed: body.fallbackUsed } : {})
       });
       return Response.json({});
     }
@@ -692,6 +705,191 @@ test("worker uses Mirage execution mint override while UI mint remains USDC", as
       process.env.MIRAGE_EXECUTION_MINT = previousMint;
     }
   }
+});
+
+test("MagicBlock mirage rail mode attempts existing Mirage CLI path", async () => {
+  const { paylinkService, paylink } = await seedPendingAgentSpend();
+  let mirageArgv: string[] = [];
+  const logs: string[] = [];
+
+  const result = await runAgentWorkerOnce({
+    config: {
+      baseUrl: "http://localhost",
+      agentWalletName: "agent-treasury",
+      dryRun: false,
+      executionEnabled: true,
+      magicBlockRailMode: "mirage",
+      magicBlockCluster: "devnet"
+    },
+    fetch: await createWorkerFetch(paylinkService),
+    executeMirage: async (argv) => {
+      mirageArgv = argv;
+      return {
+        stdout: VALID_SIGNATURE,
+        stderr: ""
+      };
+    },
+    logger: {
+      log(message) {
+        logs.push(message);
+      },
+      error() {}
+    }
+  });
+
+  const paymentIntent = await paylinkService.getPaymentIntentByPaylinkId(paylink.id);
+  assert.equal(result.confirmed, 1);
+  assert.equal(mirageArgv[0], "transfer");
+  assert.equal(mirageArgv[mirageArgv.indexOf("--visibility") + 1], "private");
+  assert.equal(paymentIntent?.metadata?.manualExecution?.executor, "magicblock-mirage");
+  assert.equal(paymentIntent?.metadata?.manualExecution?.executionRail, "magicblock-mirage");
+  assert.equal(paymentIntent?.metadata?.manualExecution?.magicblockRailAttempted, true);
+  assert.equal(paymentIntent?.metadata?.manualExecution?.magicblockRailMode, "mirage");
+  assert.equal(paymentIntent?.metadata?.manualExecution?.magicblockRailStatus, "confirmed");
+  assert.equal(paymentIntent?.metadata?.manualExecution?.fallbackUsed, false);
+  assert.ok(logs.includes("MAGICBLOCK_RAIL_MODE=mirage"));
+  assert.ok(logs.includes("attempting MagicBlock rail: mirage"));
+});
+
+test("MagicBlock payments-api mode builds API request", async () => {
+  let requestUrl = "";
+  let requestBody: JsonRecord = {};
+  let authorization = "";
+
+  const result = await executeMagicBlockRail(
+    {
+      paylinkId: "pl_magicblock",
+      agentId: "coffee-agent",
+      controllerWallet: "owner-alpha",
+      recipient: DEFAULT_DEMO_AGENT_RECIPIENT,
+      amount: "5",
+      displayMint: "USDC",
+      executionMint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+      memo: "whisperpay:agent:coffee-agent:paylink:pl_magicblock",
+      visibility: "private",
+      split: 4,
+      minDelayMs: 500,
+      maxDelayMs: 5000
+    },
+    {
+      env: {
+        MAGICBLOCK_RAIL_MODE: "payments-api",
+        MAGICBLOCK_CLUSTER: "devnet",
+        MAGICBLOCK_PRIVATE_PAYMENTS_API_URL: "https://payments.magicblock.example/private-payments",
+        MAGICBLOCK_PRIVATE_PAYMENTS_API_KEY: "test-key"
+      },
+      fetch: async (input, init) => {
+        requestUrl = String(input);
+        authorization = new Headers(init?.headers).get("authorization") ?? "";
+        requestBody = JSON.parse(String(init?.body ?? "{}")) as JsonRecord;
+        return Response.json({ txSignature: VALID_SIGNATURE, token: "must-not-be-stored" });
+      }
+    }
+  );
+
+  assert.equal(result.status, "confirmed");
+  assert.equal(result.txSignature, VALID_SIGNATURE);
+  assert.equal(result.rail, "magicblock-private-payments-api");
+  assert.equal(requestUrl, "https://payments.magicblock.example/private-payments");
+  assert.equal(authorization, "Bearer test-key");
+  assert.equal(requestBody.paylinkId, "pl_magicblock");
+  assert.equal(requestBody.agentId, "coffee-agent");
+  assert.equal(requestBody.controllerWallet, "owner-alpha");
+  assert.equal(requestBody.recipient, DEFAULT_DEMO_AGENT_RECIPIENT);
+  assert.equal(requestBody.amount, "5");
+  assert.equal(requestBody.displayMint, "USDC");
+  assert.equal(requestBody.executionMint, "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
+  assert.equal(requestBody.memo, "whisperpay:agent:coffee-agent:paylink:pl_magicblock");
+  assert.equal(requestBody.visibility, "private");
+  assert.equal(requestBody.split, 4);
+  assert.equal(requestBody.minDelayMs, 500);
+  assert.equal(requestBody.maxDelayMs, 5000);
+  assert.equal(requestBody.cluster, "devnet");
+  assert.deepEqual(result.rawResponse, { txSignature: VALID_SIGNATURE });
+});
+
+test("MagicBlock payments-api mode fails gracefully when config is missing", async () => {
+  const result = await executeMagicBlockRail(
+    {
+      paylinkId: "pl_missing_config",
+      agentId: "coffee-agent",
+      controllerWallet: "owner-alpha",
+      recipient: DEFAULT_DEMO_AGENT_RECIPIENT,
+      amount: "5",
+      displayMint: "USDC",
+      executionMint: "USDC",
+      memo: "whisperpay:agent:coffee-agent:paylink:pl_missing_config",
+      visibility: "private",
+      split: 4,
+      minDelayMs: 500,
+      maxDelayMs: 5000
+    },
+    {
+      env: {
+        MAGICBLOCK_RAIL_MODE: "payments-api",
+        MAGICBLOCK_CLUSTER: "devnet"
+      },
+      fetch: async () => {
+        throw new Error("fetch should not be called");
+      }
+    }
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.txSignature, null);
+  assert.equal(result.rail, "magicblock-private-payments-api");
+  assert.equal(result.error, "MagicBlock Private Payments API is not configured.");
+  assert.equal(result.rawResponse, null);
+});
+
+test("native fallback still runs after MagicBlock failure and stores attempt metadata", async () => {
+  const { paylinkService, paylink } = await seedPendingAgentSpend();
+  const fallbackSignature = "9".repeat(88);
+  const logs: string[] = [];
+  let fallbackCalls = 0;
+
+  const result = await runAgentWorkerOnce({
+    config: {
+      baseUrl: "http://localhost",
+      agentWalletName: "agent-treasury",
+      dryRun: false,
+      executionEnabled: true,
+      magicBlockRailMode: "payments-api",
+      magicBlockCluster: "devnet",
+      executionFallbackMode: "solana-devnet-native",
+      solanaExecutorSecretKeyJson: "[1,2,3]"
+    },
+    fetch: await createWorkerFetch(paylinkService),
+    executeSolanaDevnetNative: async (input) => {
+      fallbackCalls += 1;
+      assert.equal(input.paylinkId, paylink.id);
+      return { txSignature: fallbackSignature };
+    },
+    logger: {
+      log(message) {
+        logs.push(message);
+      },
+      error() {}
+    }
+  });
+
+  const paymentIntent = await paylinkService.getPaymentIntentByPaylinkId(paylink.id);
+  assert.equal(result.confirmed, 1);
+  assert.equal(fallbackCalls, 1);
+  assert.equal(paymentIntent?.txSignature, fallbackSignature);
+  assert.equal(paymentIntent?.metadata?.manualExecution?.executor, "solana-devnet-native-fallback");
+  assert.equal(paymentIntent?.metadata?.manualExecution?.executionRail, "solana-devnet-native-fallback");
+  assert.equal(paymentIntent?.metadata?.manualExecution?.magicblockRailAttempted, true);
+  assert.equal(paymentIntent?.metadata?.manualExecution?.magicblockRailMode, "payments-api");
+  assert.equal(paymentIntent?.metadata?.manualExecution?.magicblockRailStatus, "failed");
+  assert.equal(
+    paymentIntent?.metadata?.manualExecution?.magicblockRailError,
+    "MagicBlock Private Payments API is not configured."
+  );
+  assert.equal(paymentIntent?.metadata?.manualExecution?.fallbackUsed, true);
+  assert.ok(logs.includes("attempting MagicBlock rail: payments-api"));
+  assert.ok(logs.includes("MagicBlock rail failed: MagicBlock Private Payments API is not configured."));
+  assert.ok(logs.includes("falling back to native devnet settlement"));
 });
 
 test("worker Mirage failure triggers Solana devnet native fallback", async () => {

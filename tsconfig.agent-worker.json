@@ -22,6 +22,7 @@
   "include": [
     "lib/agent-spend/**/*.ts",
     "lib/agent-worker/**/*.ts",
+    "lib/execution-rails/**/*.ts",
     "lib/mirage/**/*.ts",
     "lib/solana-validation.ts",
     "lib/whisperpay-server/**/*.ts",

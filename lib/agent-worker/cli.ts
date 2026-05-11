@@ -9,6 +9,7 @@ import {
   type MirageExecutionResult,
   type AgentWorkerConfig,
   type AgentWorkerRunResult,
+  type MagicBlockRailExecutor,
   type MirageExecutor,
   type SolanaDevnetNativeExecutor,
   type SolanaDevnetSplExecutor,
@@ -89,6 +90,7 @@ interface RunAgentWorkerCliOptions {
   config?: AgentWorkerConfig;
   env?: NodeJS.ProcessEnv;
   executeMirage?: MirageExecutor;
+  executeMagicBlockRail?: MagicBlockRailExecutor;
   executeSolanaDevnetNative?: SolanaDevnetNativeExecutor;
   executeSolanaDevnetSpl?: SolanaDevnetSplExecutor;
   fetch?: WorkerFetch;
@@ -108,6 +110,7 @@ export const runAgentWorkerCliIteration = async (
   logger.log(`Control plane: ${config.baseUrl}`);
   logger.log(`Mirage executable: ${mirageExecutable ?? "not found on PATH"}`);
   logger.log(`Mirage execution enabled: ${config.executionEnabled ? "true" : "false"}`);
+  logger.log(`MAGICBLOCK_RAIL_MODE=${config.magicBlockRailMode ?? "off"}`);
   logger.log(`Execution fallback mode: ${config.executionFallbackMode || "disabled"}`);
   logger.log(
     nativeFallbackEnabled
@@ -127,6 +130,7 @@ export const runAgentWorkerCliIteration = async (
   const result = await runAgentWorkerOnce({
     config,
     executeMirage: options.executeMirage ?? executeMirage,
+    executeMagicBlockRail: options.executeMagicBlockRail,
     executeSolanaDevnetNative: options.executeSolanaDevnetNative ?? createSolanaDevnetNativeExecutor(),
     executeSolanaDevnetSpl: options.executeSolanaDevnetSpl ?? createSolanaDevnetSplExecutor(),
     fetch: options.fetch,

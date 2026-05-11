@@ -87,6 +87,12 @@ export interface ServerManualExecutionMetadata {
   executionRail?: string;
   mirageAttempted?: boolean;
   mirageError?: string;
+  magicblockRailAttempted?: boolean;
+  magicblockRailMode?: string;
+  magicblockRailStatus?: string;
+  magicblockRailError?: string;
+  magicblockRailRawResponse?: unknown;
+  fallbackUsed?: boolean;
 }
 
 export type ServerPaymentIntentStatusChange =

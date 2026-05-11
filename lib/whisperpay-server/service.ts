@@ -69,6 +69,12 @@ interface ConfirmManualAgentSpendInput {
   executionRail?: string;
   mirageAttempted?: boolean;
   mirageError?: string | null;
+  magicblockRailAttempted?: boolean;
+  magicblockRailMode?: string;
+  magicblockRailStatus?: string;
+  magicblockRailError?: string | null;
+  magicblockRailRawResponse?: unknown;
+  fallbackUsed?: boolean;
 }
 
 const assertNonEmptyString = (value: string, fieldName: string): string => {
@@ -433,7 +439,17 @@ export class WhisperPayServerService {
       confirmedAt: now,
       ...(input.executionRail ? { executionRail: input.executionRail } : {}),
       ...(input.mirageAttempted !== undefined ? { mirageAttempted: input.mirageAttempted } : {}),
-      ...(input.mirageError ? { mirageError: input.mirageError } : {})
+      ...(input.mirageError ? { mirageError: input.mirageError } : {}),
+      ...(input.magicblockRailAttempted !== undefined
+        ? { magicblockRailAttempted: input.magicblockRailAttempted }
+        : {}),
+      ...(input.magicblockRailMode ? { magicblockRailMode: input.magicblockRailMode } : {}),
+      ...(input.magicblockRailStatus ? { magicblockRailStatus: input.magicblockRailStatus } : {}),
+      ...(input.magicblockRailError ? { magicblockRailError: input.magicblockRailError } : {}),
+      ...(input.magicblockRailRawResponse !== undefined
+        ? { magicblockRailRawResponse: clone(input.magicblockRailRawResponse) }
+        : {}),
+      ...(input.fallbackUsed !== undefined ? { fallbackUsed: input.fallbackUsed } : {})
     };
     metadata.timeline = appendTimeline(metadata, "manual_mirage_execution_confirmed", now, "confirmed");
 

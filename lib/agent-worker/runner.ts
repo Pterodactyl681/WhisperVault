@@ -1,5 +1,11 @@
 import type { PendingAgentSpendExecution } from "../agent-spend/pending-execution";
 import { WORKER_SECRET_HEADER } from "../agent-spend/worker-auth";
+import {
+  executeMagicBlockRail as defaultExecuteMagicBlockRail,
+  getMagicBlockRailMode,
+  type ExecuteMagicBlockRailResult,
+  type MagicBlockRailMode
+} from "../execution-rails/magicblock";
 import { isLikelySolanaSignature } from "../solana-validation";
 import { createTelegramBotClient, type TelegramBotClient } from "../telegram/client";
 import { validateMirageTransferArgv } from "./validation";
@@ -14,6 +20,10 @@ export interface AgentWorkerConfig {
   mirageExecutionMint?: string | null;
   executionFallbackMode?: string | null;
   solanaExecutorSecretKeyJson?: string | null;
+  magicBlockPrivatePaymentsApiUrl?: string | null;
+  magicBlockPrivatePaymentsApiKey?: string | null;
+  magicBlockRailMode?: MagicBlockRailMode;
+  magicBlockCluster?: string | null;
 }
 
 export interface AgentWorkerRunResult {
@@ -55,6 +65,7 @@ export interface SolanaDevnetSplTransferResult {
 
 export type WorkerFetch = typeof fetch;
 export type MirageExecutor = (argv: string[]) => Promise<MirageExecutionResult>;
+export type MagicBlockRailExecutor = typeof defaultExecuteMagicBlockRail;
 export type SolanaDevnetNativeExecutor = (
   input: SolanaDevnetNativeTransferInput
 ) => Promise<SolanaDevnetNativeTransferResult>;
@@ -65,6 +76,7 @@ interface RunAgentWorkerOnceOptions {
   config: AgentWorkerConfig;
   fetch?: WorkerFetch;
   executeMirage?: MirageExecutor;
+  executeMagicBlockRail?: MagicBlockRailExecutor;
   executeSolanaDevnetNative?: SolanaDevnetNativeExecutor;
   executeSolanaDevnetSpl?: SolanaDevnetSplExecutor;
   telegramClient?: TelegramBotClient;
@@ -109,7 +121,11 @@ export const parseAgentWorkerConfig = (
     telegramBotToken: env.TELEGRAM_BOT_TOKEN?.trim() || null,
     mirageExecutionMint: env.MIRAGE_EXECUTION_MINT?.trim() || null,
     executionFallbackMode: env.EXECUTION_FALLBACK_MODE?.trim() || null,
-    solanaExecutorSecretKeyJson: env.SOLANA_EXECUTOR_SECRET_KEY_JSON?.trim() || null
+    solanaExecutorSecretKeyJson: env.SOLANA_EXECUTOR_SECRET_KEY_JSON?.trim() || null,
+    magicBlockPrivatePaymentsApiUrl: env.MAGICBLOCK_PRIVATE_PAYMENTS_API_URL?.trim() || null,
+    magicBlockPrivatePaymentsApiKey: env.MAGICBLOCK_PRIVATE_PAYMENTS_API_KEY?.trim() || null,
+    magicBlockRailMode: getMagicBlockRailMode(env),
+    magicBlockCluster: env.MAGICBLOCK_CLUSTER?.trim() || "devnet"
   };
 };
 
@@ -217,6 +233,12 @@ const confirmExecution = async (
     executionRail?: string;
     mirageAttempted?: boolean;
     mirageError?: string | null;
+    magicblockRailAttempted?: boolean;
+    magicblockRailMode?: string;
+    magicblockRailStatus?: string;
+    magicblockRailError?: string | null;
+    magicblockRailRawResponse?: unknown;
+    fallbackUsed?: boolean;
   }
 ): Promise<void> => {
   const response = await fetchFn(buildControlPlaneUrl(baseUrl, CONFIRM_MANUAL_PATH), {
@@ -228,7 +250,17 @@ const confirmExecution = async (
       executor: metadata?.executor ?? "mirage-cli",
       ...(metadata?.executionRail ? { executionRail: metadata.executionRail } : {}),
       ...(metadata?.mirageAttempted !== undefined ? { mirageAttempted: metadata.mirageAttempted } : {}),
-      ...(metadata?.mirageError ? { mirageError: metadata.mirageError } : {})
+      ...(metadata?.mirageError ? { mirageError: metadata.mirageError } : {}),
+      ...(metadata?.magicblockRailAttempted !== undefined
+        ? { magicblockRailAttempted: metadata.magicblockRailAttempted }
+        : {}),
+      ...(metadata?.magicblockRailMode ? { magicblockRailMode: metadata.magicblockRailMode } : {}),
+      ...(metadata?.magicblockRailStatus ? { magicblockRailStatus: metadata.magicblockRailStatus } : {}),
+      ...(metadata?.magicblockRailError ? { magicblockRailError: metadata.magicblockRailError } : {}),
+      ...(metadata?.magicblockRailRawResponse !== undefined
+        ? { magicblockRailRawResponse: metadata.magicblockRailRawResponse }
+        : {}),
+      ...(metadata?.fallbackUsed !== undefined ? { fallbackUsed: metadata.fallbackUsed } : {})
     })
   });
 
@@ -393,11 +425,39 @@ const isSolanaDevnetNativeFallbackEnabled = (config: AgentWorkerConfig): boolean
 const isSolanaDevnetSplFallbackEnabled = (config: AgentWorkerConfig): boolean =>
   config.executionFallbackMode?.trim() === "solana-devnet-spl";
 
-const buildFallbackMetadata = (executionRail: string, mirageError: string) => ({
+const buildMagicBlockEnv = (config: AgentWorkerConfig): Record<string, string | undefined> => ({
+  MAGICBLOCK_PRIVATE_PAYMENTS_API_URL: config.magicBlockPrivatePaymentsApiUrl ?? undefined,
+  MAGICBLOCK_PRIVATE_PAYMENTS_API_KEY: config.magicBlockPrivatePaymentsApiKey ?? undefined,
+  MAGICBLOCK_RAIL_MODE: config.magicBlockRailMode ?? "off",
+  MAGICBLOCK_CLUSTER: config.magicBlockCluster ?? "devnet"
+});
+
+const buildMagicBlockReceiptMetadata = (
+  mode: MagicBlockRailMode,
+  result: ExecuteMagicBlockRailResult,
+  fallbackUsed: boolean
+) => ({
+  magicblockRailAttempted: true,
+  magicblockRailMode: mode,
+  magicblockRailStatus: result.status,
+  ...(result.error ? { magicblockRailError: result.error } : {}),
+  ...(result.rawResponse !== null ? { magicblockRailRawResponse: result.rawResponse } : {}),
+  fallbackUsed
+});
+
+const buildFallbackMetadata = (
+  executionRail: string,
+  mirageError: string,
+  magicBlock?: {
+    mode: MagicBlockRailMode;
+    result: ExecuteMagicBlockRailResult;
+  }
+) => ({
   executor: executionRail,
   executionRail,
   mirageAttempted: true,
-  mirageError
+  mirageError,
+  ...(magicBlock ? buildMagicBlockReceiptMetadata(magicBlock.mode, magicBlock.result, true) : {})
 });
 
 const runSolanaDevnetFallbackCompletion = async (
@@ -408,14 +468,100 @@ const runSolanaDevnetFallbackCompletion = async (
   options: RunAgentWorkerOnceOptions,
   fetchFn: WorkerFetch,
   logger: WorkerLogger,
-  result: AgentWorkerRunResult
+  result: AgentWorkerRunResult,
+  magicBlock?: {
+    mode: MagicBlockRailMode;
+    result: ExecuteMagicBlockRailResult;
+  }
 ): Promise<void> => {
   result.executed += 1;
-  const fallbackMetadata = buildFallbackMetadata(executionRail, mirageError);
+  const fallbackMetadata = buildFallbackMetadata(executionRail, mirageError, magicBlock);
   await confirmExecution(options.config.baseUrl, options.config.workerSecret, spend, txSignature, fetchFn, fallbackMetadata);
   result.confirmed += 1;
   logger.log(`Confirmed ${spend.paylinkId} with tx ${txSignature}`);
   await notifyTelegramConfirmation(spend, txSignature, options.config, logger, options.telegramClient, fallbackMetadata);
+};
+
+const runFallbackAfterRailFailure = async (
+  spend: PendingAgentSpendExecution,
+  railName: string,
+  railError: string,
+  executionMint: string,
+  options: RunAgentWorkerOnceOptions,
+  fetchFn: WorkerFetch,
+  logger: WorkerLogger,
+  result: AgentWorkerRunResult,
+  magicBlock?: {
+    mode: MagicBlockRailMode;
+    result: ExecuteMagicBlockRailResult;
+  }
+): Promise<boolean> => {
+  if (isSolanaDevnetSplFallbackEnabled(options.config)) {
+    if (!options.executeSolanaDevnetSpl) {
+      throw new Error(`${railName} failed (${railError}) and Solana devnet SPL fallback executor is not configured.`);
+    }
+
+    if (!options.config.solanaExecutorSecretKeyJson?.trim()) {
+      throw new Error(`${railName} failed (${railError}) and SOLANA_EXECUTOR_SECRET_KEY_JSON is required for fallback.`);
+    }
+
+    logger.log("falling back to native devnet settlement");
+    logger.log("trying Solana devnet SPL fallback");
+    const fallback = await options.executeSolanaDevnetSpl({
+      recipient: spend.recipient,
+      amount: spend.amount,
+      mint: executionMint,
+      secretKeyJson: options.config.solanaExecutorSecretKeyJson
+    });
+    await runSolanaDevnetFallbackCompletion(
+      spend,
+      railError,
+      "solana-devnet-spl-fallback",
+      fallback.txSignature,
+      options,
+      fetchFn,
+      logger,
+      result,
+      magicBlock
+    );
+    return true;
+  }
+
+  if (!isSolanaDevnetNativeFallbackEnabled(options.config)) {
+    return false;
+  }
+
+  logger.log("falling back to native devnet settlement");
+  logger.log("trying Solana devnet native fallback");
+  if (!options.executeSolanaDevnetNative) {
+    throw new Error(`${railName} failed (${railError}) and Solana devnet native fallback executor is not configured.`);
+  }
+
+  if (!options.config.solanaExecutorSecretKeyJson?.trim()) {
+    throw new Error(`${railName} failed (${railError}) and SOLANA_EXECUTOR_SECRET_KEY_JSON is required for fallback.`);
+  }
+
+  const fallback = await options.executeSolanaDevnetNative({
+    paylinkId: spend.paylinkId,
+    agentId: spend.agentId,
+    recipient: spend.recipient,
+    amount: spend.amount,
+    displayMint: formatMintLabel(spend.mint),
+    secretKeyJson: options.config.solanaExecutorSecretKeyJson
+  });
+  logger.log(`native fallback tx confirmed: ${fallback.txSignature}`);
+  await runSolanaDevnetFallbackCompletion(
+    spend,
+    railError,
+    "solana-devnet-native-fallback",
+    fallback.txSignature,
+    options,
+    fetchFn,
+    logger,
+    result,
+    magicBlock
+  );
+  return true;
 };
 
 export const runAgentWorkerOnce = async (
@@ -424,6 +570,8 @@ export const runAgentWorkerOnce = async (
   const fetchFn = options.fetch ?? fetch;
   const logger = options.logger ?? console;
   const pending = await fetchPendingExecutions(options.config.baseUrl, options.config.workerSecret, fetchFn, logger);
+  const magicBlockRailMode = options.config.magicBlockRailMode ?? "off";
+  const executeMagicBlockRail = options.executeMagicBlockRail ?? defaultExecuteMagicBlockRail;
   const result: AgentWorkerRunResult = {
     fetched: pending.length,
     planned: 0,
@@ -431,6 +579,7 @@ export const runAgentWorkerOnce = async (
     confirmed: 0,
     errors: []
   };
+  logger.log(`MAGICBLOCK_RAIL_MODE=${magicBlockRailMode}`);
 
   for (const spend of pending) {
     try {
@@ -464,6 +613,76 @@ export const runAgentWorkerOnce = async (
         continue;
       }
 
+      if (magicBlockRailMode !== "off") {
+        logger.log(`attempting MagicBlock rail: ${magicBlockRailMode}`);
+        const magicBlockResult = await executeMagicBlockRail(
+          {
+            paylinkId: spend.paylinkId,
+            agentId: spend.agentId,
+            controllerWallet: spend.controllerWallet,
+            recipient: spend.recipient,
+            amount: spend.amount,
+            displayMint: spend.mint,
+            executionMint,
+            memo: spend.memo,
+            visibility: "private",
+            split: 4,
+            minDelayMs: 500,
+            maxDelayMs: 5000
+          },
+          {
+            env: buildMagicBlockEnv(options.config),
+            fetch: fetchFn,
+            executeMirage: options.executeMirage,
+            mirageArgv: executionArgv,
+            mirageDisplayCommand: `mirage ${executionArgv.join(" ")}`,
+            walletName: options.config.agentWalletName
+          }
+        );
+
+        if (magicBlockResult.status === "confirmed" && magicBlockResult.txSignature) {
+          result.executed += 1;
+          const metadata = {
+            executor: magicBlockResult.rail,
+            executionRail: magicBlockResult.rail,
+            ...(magicBlockRailMode === "mirage" ? { mirageAttempted: true } : {}),
+            ...buildMagicBlockReceiptMetadata(magicBlockRailMode, magicBlockResult, false)
+          };
+          await confirmExecution(options.config.baseUrl, options.config.workerSecret, spend, magicBlockResult.txSignature, fetchFn, metadata);
+          result.confirmed += 1;
+          logger.log(`Confirmed ${spend.paylinkId} with tx ${magicBlockResult.txSignature}`);
+          await notifyTelegramConfirmation(spend, magicBlockResult.txSignature, options.config, logger, options.telegramClient, metadata);
+          continue;
+        }
+
+        const reason =
+          magicBlockResult.error ??
+          (magicBlockResult.status === "attempted"
+            ? "MagicBlock rail returned attempted without a confirmed transaction."
+            : "MagicBlock rail did not return a confirmed transaction.");
+        logger.log(`MagicBlock rail failed: ${reason}`);
+        const fallbackUsed = await runFallbackAfterRailFailure(
+          spend,
+          "MagicBlock rail",
+          reason,
+          executionMint,
+          options,
+          fetchFn,
+          logger,
+          result,
+          {
+            mode: magicBlockRailMode,
+            result: magicBlockResult
+          }
+        );
+
+        if (fallbackUsed) {
+          continue;
+        }
+
+        throw new Error(`MagicBlock rail failed: ${reason}`);
+      }
+
       if (!options.executeMirage) {
         throw new Error("Mirage executor is not configured.");
       }
@@ -484,68 +703,24 @@ export const runAgentWorkerOnce = async (
       } catch (error) {
         mirageError = error instanceof Error ? error.message : String(error);
 
-        if (isSolanaDevnetSplFallbackEnabled(options.config)) {
-          if (!options.executeSolanaDevnetSpl) {
-            throw new Error(`Mirage failed (${mirageError}) and Solana devnet SPL fallback executor is not configured.`);
-          }
+        const fallbackUsed = await runFallbackAfterRailFailure(
+          spend,
+          "Mirage",
+          mirageError,
+          executionMint,
+          options,
+          fetchFn,
+          logger,
+          result
+        );
 
-          if (!options.config.solanaExecutorSecretKeyJson?.trim()) {
-            throw new Error(`Mirage failed (${mirageError}) and SOLANA_EXECUTOR_SECRET_KEY_JSON is required for fallback.`);
-          }
-
-          logger.log("trying Solana devnet SPL fallback");
-          const fallback = await options.executeSolanaDevnetSpl({
-            recipient: spend.recipient,
-            amount: spend.amount,
-            mint: executionMint,
-            secretKeyJson: options.config.solanaExecutorSecretKeyJson
-          });
-          await runSolanaDevnetFallbackCompletion(
-            spend,
-            mirageError,
-            "solana-devnet-spl-fallback",
-            fallback.txSignature,
-            options,
-            fetchFn,
-            logger,
-            result
-          );
+        if (fallbackUsed) {
           continue;
         }
 
         if (!isSolanaDevnetNativeFallbackEnabled(options.config)) {
           throw error;
         }
-
-        logger.log("trying Solana devnet native fallback");
-        if (!options.executeSolanaDevnetNative) {
-          throw new Error(`Mirage failed (${mirageError}) and Solana devnet native fallback executor is not configured.`);
-        }
-
-        if (!options.config.solanaExecutorSecretKeyJson?.trim()) {
-          throw new Error(`Mirage failed (${mirageError}) and SOLANA_EXECUTOR_SECRET_KEY_JSON is required for fallback.`);
-        }
-
-        const fallback = await options.executeSolanaDevnetNative({
-          paylinkId: spend.paylinkId,
-          agentId: spend.agentId,
-          recipient: spend.recipient,
-          amount: spend.amount,
-          displayMint: formatMintLabel(spend.mint),
-          secretKeyJson: options.config.solanaExecutorSecretKeyJson
-        });
-        logger.log(`native fallback tx confirmed: ${fallback.txSignature}`);
-        await runSolanaDevnetFallbackCompletion(
-          spend,
-          mirageError,
-          "solana-devnet-native-fallback",
-          fallback.txSignature,
-          options,
-          fetchFn,
-          logger,
-          result
-        );
-        continue;
       }
 
       if (!txSignature) {

@@ -28,6 +28,7 @@
     "lib/telegram-link/**/*.ts",
     "lib/telegram/**/*.ts",
     "lib/demo-readiness/**/*.ts",
+    "lib/execution-rails/**/*.ts",
     "lib/mirage/**/*.ts",
     "lib/whisperpay-server/**/*.ts",
     "tests/agent-budget-service.test.ts",
