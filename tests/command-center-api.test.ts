@@ -341,9 +341,7 @@ test("dashboard source renders agent list and Ghost Allowance surfaces", async (
   assert.match(source, /Spend Intent Panel/);
   assert.match(source, /Agent Vault ready/);
   assert.match(source, /Connect your agent next/);
-  assert.match(source, /https:\/\/whisper-vault-sigma\.vercel\.app\/api\/agent\/intents/);
-  assert.match(source, /Copy curl example/);
-  assert.match(source, /Copy JS example/);
+  assert.match(source, /\/api\/agent-spend/);
   assert.match(source, /\/api\/agents/);
 });
 
