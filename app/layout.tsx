@@ -3,7 +3,6 @@ import "./globals.css";
 import "@solana/wallet-adapter-react-ui/styles.css";
 import { AppShellContent } from "@/components/layout/app-shell-content";
 import { AnimatedBackground } from "@/components/layout/animated-background";
-import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
 import { LocaleProvider } from "@/components/providers/locale-provider";
 import { SolanaWalletProvider } from "@/components/providers/solana-wallet-provider";
@@ -33,7 +32,6 @@ export default function RootLayout({
             <main className="mx-auto w-full max-w-6xl flex-1 px-3 pb-6 pt-6 sm:px-4 md:px-6 md:pb-8 md:pt-8">
               <AppShellContent>{children}</AppShellContent>
             </main>
-            <Footer />
           </SolanaWalletProvider>
         </LocaleProvider>
       </body>
