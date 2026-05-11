@@ -220,6 +220,17 @@ export class SupabaseAgentBudgetRepository implements AgentBudgetRepository {
     return this.getOrThrow(record.budget.agentId);
   }
 
+  async deleteByOwner(owner: string): Promise<void> {
+    const records = await this.list();
+    const ownedAgentIds = records.filter((record) => record.budget.owner === owner).map((record) => record.budget.agentId);
+
+    for (const agentId of ownedAgentIds) {
+      await this.client.delete(RESERVATIONS_TABLE, { agent_id: agentId });
+    }
+
+    await this.client.delete(BUDGETS_TABLE, { owner });
+  }
+
   private async getOrThrow(agentId: string): Promise<StoredAgentBudgetRecord> {
     const record = await this.get(agentId);
 

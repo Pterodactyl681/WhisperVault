@@ -147,6 +147,20 @@ export class AgentRegistryService {
     return agents.find((agent) => agent.id === context?.agentId) ?? agents[0] ?? null;
   }
 
+  async getExplicitActiveAgent(controllerWallet: string, budgets: AgentBudget[] = []): Promise<RegisteredAgent | null> {
+    const agents = await this.listAgents(controllerWallet, budgets);
+    const context = await this.repository.getActiveAgent(controllerWallet);
+    return context ? agents.find((agent) => agent.id === context.agentId) ?? null : null;
+  }
+
+  async clearActiveAgent(controllerWallet: string): Promise<void> {
+    await this.repository.clearActiveAgent(controllerWallet);
+  }
+
+  async clearControllerState(controllerWallet: string): Promise<void> {
+    await this.repository.clearControllerState(controllerWallet);
+  }
+
   async addRecipient(controllerWallet: string, label: string, address: string, agentId?: string | null): Promise<AgentRecipient> {
     const normalizedLabel = normalizeName(label);
 

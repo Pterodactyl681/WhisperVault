@@ -9,7 +9,7 @@ import type { AgentRegistryService, RegisteredAgent } from "../agent-registry";
 import type { GhostTabService } from "../ghost-tab/service";
 import { listPendingAgentSpendExecutions } from "../agent-spend/pending-execution";
 import type { ServerPaymentIntent, ServerPaymentIntentMetadata, WhisperPayServerService } from "../whisperpay-server";
-import type { DemoReadinessResetResult, DemoReadinessStatus } from "./types";
+import type { DemoReadinessClearResult, DemoReadinessResetResult, DemoReadinessStatus } from "./types";
 
 interface DemoReadinessServiceOptions {
   budgetService: AgentBudgetService;
@@ -117,6 +117,7 @@ export class DemoReadinessService {
       refillAmount: DEMO_REFILL_AMOUNT,
       refillIntervalMinutes: DEMO_REFILL_INTERVAL_MINUTES
     });
+    const ghostSnapshot = await this.ghostTabService.getSnapshot(budget.agentId);
     const archivedPendingCount = await this.archiveStalePendingExecutions(controllerWallet, budget.agentId);
     const pendingCount = await this.countPendingExecutions(controllerWallet, budget.agentId);
 
@@ -125,8 +126,8 @@ export class DemoReadinessService {
       activeAgent,
       budget,
       ghostTab: {
-        session: ghostSession,
-        events: (await this.ghostTabService.getSnapshot(budget.agentId)).events
+        ...ghostSnapshot,
+        session: ghostSession
       },
       recipient,
       archivedPendingCount,
@@ -135,12 +136,22 @@ export class DemoReadinessService {
     };
   }
 
+  async clear(controllerWallet: string): Promise<DemoReadinessClearResult> {
+    await this.budgetService.clearBudgetsForOwner(controllerWallet);
+    await this.registryService.clearControllerState(controllerWallet);
+
+    return {
+      controllerWallet,
+      cleared: true
+    };
+  }
+
   async status(controllerWallet: string): Promise<DemoReadinessStatus> {
     const budgets = await this.budgetService.listAgentBudgets();
     const ownedBudgets = budgets.filter((budget) => budget.owner === controllerWallet);
     const activeAgent = await this.registryService.getActiveAgent(controllerWallet, ownedBudgets);
     const activeBudget = activeAgent ? ownedBudgets.find((budget) => budget.agentId === activeAgent.id) ?? null : null;
-    const snapshot = activeAgent ? await this.ghostTabService.getSnapshot(activeAgent.id) : { session: null, events: [] };
+    const snapshot = activeAgent ? await this.ghostTabService.getSnapshot(activeAgent.id) : null;
     const pendingCount = activeAgent ? await this.countPendingExecutions(controllerWallet, activeAgent.id) : 0;
     const lastConfirmed = activeAgent ? await this.findLastConfirmedPayment(controllerWallet, activeAgent.id) : null;
 
@@ -148,8 +159,8 @@ export class DemoReadinessService {
       controllerWallet,
       activeAgentName: activeAgent?.name ?? null,
       activeAgentId: activeAgent?.id ?? null,
-      ghostAllowanceLive: snapshot.session?.allowanceLive ?? activeBudget?.liveAllowance ?? null,
-      ghostAllowanceMax: snapshot.session?.allowanceMax ?? activeBudget?.maxLiveAllowance ?? null,
+      ghostAllowanceLive: snapshot?.session?.allowanceLive ?? activeBudget?.liveAllowance ?? null,
+      ghostAllowanceMax: snapshot?.session?.allowanceMax ?? activeBudget?.maxLiveAllowance ?? null,
       recipientLabel: activeAgent?.defaultRecipientLabel ?? null,
       recipientDisplayLabel: activeAgent?.defaultRecipientLabel === DEMO_RECIPIENT_LABEL ? DEMO_RECIPIENT_DISPLAY_LABEL : activeAgent?.defaultRecipientLabel ?? null,
       recipientAddress: activeAgent?.defaultRecipientAddress ?? null,

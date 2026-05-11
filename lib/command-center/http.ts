@@ -21,6 +21,7 @@ interface CommandCenterHttpHandlers {
   createAgent: (request: Request) => Promise<Response>;
   generateAgentToken: (request: Request) => Promise<Response>;
   useAgent: (request: Request) => Promise<Response>;
+  clearActiveAgent: (request: Request) => Promise<Response>;
   listRecipients: (request: Request) => Promise<Response>;
   addRecipient: (request: Request) => Promise<Response>;
   useRecipient: (request: Request) => Promise<Response>;
@@ -41,6 +42,7 @@ type CommandCenterRouteName =
   | "/api/agents/create"
   | "/api/agents/token"
   | "/api/agents/use"
+  | "/api/agents/clear-active"
   | "/api/recipients"
   | "/api/recipients/add"
   | "/api/recipients/use"
@@ -198,7 +200,7 @@ const receiptBelongsToController = (
     return false;
   }
 
-  return agentPlan.controllerWallet === controllerWallet || ownedAgentIds.has(agentPlan.agentId);
+  return ownedAgentIds.has(agentPlan.agentId) && agentPlan.controllerWallet === controllerWallet;
 };
 
 const serializeReceipt = (paymentIntent: ServerPaymentIntent) => {
@@ -241,7 +243,7 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
     const budgets = await options.budgetPolicy.listBudgets();
     const ownedBudgets = budgets.filter((budget) => budget.owner === controllerWallet);
     const agents = await options.registryService.listAgents(controllerWallet, ownedBudgets);
-    const activeAgent = await options.registryService.getActiveAgent(controllerWallet, ownedBudgets);
+    const activeAgent = await options.registryService.getExplicitActiveAgent(controllerWallet, ownedBudgets);
     const ghostTabs = new Map<string, GhostTabSnapshot>();
     const warnings: string[] = [];
 
@@ -477,6 +479,23 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
           controllerWallet,
           activeAgentId: agent.id,
           agent: serializeAgent(agent, true, options.ghostTabService ? await options.ghostTabService.getSnapshot(agent.id) : null)
+        });
+      } catch (error) {
+        logRouteError("/api/agents/clear-active", error);
+        return handleKnownError(error);
+      }
+    },
+
+    clearActiveAgent: async (request) => {
+      try {
+        const body = await parseJsonObject(request);
+        const controllerWallet = readControllerWallet(request, body, demoControllerWallet);
+        await options.registryService.clearActiveAgent(controllerWallet);
+
+        return json({
+          controllerWallet,
+          activeAgentId: null,
+          message: "Active Agent Vault cleared"
         });
       } catch (error) {
         logRouteError("/api/agents/use", error);

@@ -11,6 +11,8 @@ export interface AgentRegistryRepository {
   listAgents(controllerWallet: string): Promise<RegisteredAgent[]>;
   getActiveAgent(controllerWallet: string): Promise<ActiveAgentContext | null>;
   setActiveAgent(context: ActiveAgentContext): Promise<ActiveAgentContext>;
+  clearActiveAgent(controllerWallet: string): Promise<void>;
+  clearControllerState(controllerWallet: string): Promise<void>;
   upsertRecipient(recipient: AgentRecipient): Promise<AgentRecipient>;
   getRecipient(controllerWallet: string, label: string): Promise<AgentRecipient | null>;
   listRecipients(controllerWallet: string): Promise<AgentRecipient[]>;
@@ -93,6 +95,26 @@ export class InMemoryAgentRegistryRepository implements AgentRegistryRepository 
   async setActiveAgent(context: ActiveAgentContext): Promise<ActiveAgentContext> {
     this.activeAgents.set(context.controllerWallet, clone(context));
     return clone(context);
+  }
+
+  async clearActiveAgent(controllerWallet: string): Promise<void> {
+    this.activeAgents.delete(controllerWallet);
+  }
+
+  async clearControllerState(controllerWallet: string): Promise<void> {
+    for (const [agentId, agent] of this.agents.entries()) {
+      if (agent.controllerWallet === controllerWallet) {
+        this.agents.delete(agentId);
+      }
+    }
+
+    this.activeAgents.delete(controllerWallet);
+
+    for (const [key, recipient] of this.recipients.entries()) {
+      if (recipient.controllerWallet === controllerWallet) {
+        this.recipients.delete(key);
+      }
+    }
   }
 
   async upsertRecipient(recipient: AgentRecipient): Promise<AgentRecipient> {
@@ -181,6 +203,23 @@ export class DevFileAgentRegistryRepository implements AgentRegistryRepository {
       ]
     });
     return clone(context);
+  }
+
+  async clearActiveAgent(controllerWallet: string): Promise<void> {
+    const file = await this.readFile();
+    await this.writeFile({
+      ...file,
+      activeAgents: file.activeAgents.filter((candidate) => candidate.controllerWallet !== controllerWallet)
+    });
+  }
+
+  async clearControllerState(controllerWallet: string): Promise<void> {
+    const file = await this.readFile();
+    await this.writeFile({
+      agents: file.agents.filter((agent) => agent.controllerWallet !== controllerWallet),
+      activeAgents: file.activeAgents.filter((candidate) => candidate.controllerWallet !== controllerWallet),
+      recipients: file.recipients.filter((recipient) => recipient.controllerWallet !== controllerWallet)
+    });
   }
 
   async upsertRecipient(recipient: AgentRecipient): Promise<AgentRecipient> {

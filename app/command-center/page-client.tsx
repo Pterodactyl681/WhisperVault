@@ -49,7 +49,7 @@ const DOCS_URL = "https://github.com/Pterodactyl681/WhisperVault#readme";
 const TELEGRAM_REFERENCE_BOT_URL = process.env.NEXT_PUBLIC_TELEGRAM_BOT_URL?.trim() ?? "";
 const AGENT_INTENTS_ENDPOINT = "https://whisper-vault-sigma.vercel.app/api/agent/intents";
 const formControlClass =
-  "h-11 w-full rounded-lg border border-violet-200/12 bg-[#080812] px-3 text-[16px] text-white caret-violet-300 outline-none transition placeholder:text-zinc-600 focus:border-violet-400/55 focus:bg-[#0B0B17] focus:shadow-[0_0_0_3px_rgba(139,92,246,0.14)] disabled:cursor-not-allowed disabled:border-white/[0.06] disabled:bg-[#07070D] disabled:text-zinc-600 [color-scheme:dark]";
+  "h-11 w-full min-w-0 rounded-lg border border-violet-200/12 bg-[#080812] px-3 text-[16px] text-white caret-violet-300 outline-none transition placeholder:text-zinc-600 focus:border-violet-400/55 focus:bg-[#0B0B17] focus:shadow-[0_0_0_3px_rgba(139,92,246,0.14)] disabled:cursor-not-allowed disabled:border-white/[0.06] disabled:bg-[#07070D] disabled:text-zinc-600 [color-scheme:dark]";
 
 interface CommandCenterAgent {
   id: string;
@@ -582,7 +582,7 @@ export default function CommandCenterPageClient() {
   const [lastOnboardedAgentId, setLastOnboardedAgentId] = useState<string | null>(null);
   const [generatedAgentToken, setGeneratedAgentToken] = useState<GeneratedAgentTokenState | null>(null);
 
-  const activeAgent = useMemo(() => agents.find((agent) => agent.isActive) ?? agents[0] ?? null, [agents]);
+  const activeAgent = useMemo(() => agents.find((agent) => agent.isActive) ?? null, [agents]);
   const confirmedReceipts = useMemo(() => receipts.filter((receipt) => receipt.status === "confirmed"), [receipts]);
   const pendingExecutions = useMemo(
     () => receipts.filter((receipt) => receipt.status === "pending" || receipt.status === "pending_execution"),
@@ -707,6 +707,22 @@ export default function CommandCenterPageClient() {
       setNotice({ tone: "success", message: "Active Agent Vault updated." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Agent could not be selected." });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const clearActiveAgent = async () => {
+    setIsSubmitting(true);
+
+    try {
+      await submitJson("/api/agents/clear-active", {});
+      setLastOnboardedAgentId(null);
+      setGeneratedAgentToken(null);
+      await loadData();
+      setNotice({ tone: "success", message: "Active Agent Vault cleared. Demo is ready for a fresh selection." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Active Agent Vault could not be cleared." });
     } finally {
       setIsSubmitting(false);
     }
@@ -877,7 +893,8 @@ export default function CommandCenterPageClient() {
             ...(secret ? { Authorization: `Bearer ${secret}` } : {})
           },
           body: JSON.stringify({
-            controllerWallet
+            controllerWallet,
+            mode: "clear"
           })
         });
 
@@ -893,7 +910,7 @@ export default function CommandCenterPageClient() {
         response = await callReset(secret);
       }
 
-      const payload = (await response.json()) as { error?: { message?: string }; activeAgent?: string; ghostAllowance?: string };
+      const payload = (await response.json()) as { error?: { message?: string }; cleared?: boolean };
 
       if (!response.ok) {
         throw new Error(payload.error?.message ?? "Demo state could not be reset.");
@@ -901,7 +918,7 @@ export default function CommandCenterPageClient() {
 
       setNotice({
         tone: "success",
-        message: `Demo state ready: ${payload.activeAgent ?? "coffee-agent"} (${payload.ghostAllowance ?? "20/20 USDC"})`
+        message: payload.cleared ? "Demo state cleared. Create or select an Agent Vault to begin." : "Demo state reset."
       });
       await loadData();
     } catch (error) {
@@ -926,8 +943,8 @@ export default function CommandCenterPageClient() {
       <div className="fixed inset-0 bg-[radial-gradient(circle_at_48%_18%,rgba(130,63,255,0.20),transparent_28%),radial-gradient(circle_at_82%_8%,rgba(93,45,185,0.16),transparent_22%),linear-gradient(180deg,#03030A_0%,#050510_48%,#020207_100%)]" />
       <div className="fixed inset-0 bg-[linear-gradient(rgba(155,111,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(155,111,255,0.035)_1px,transparent_1px)] bg-[size:72px_72px] opacity-30" />
 
-      <div className="relative grid min-h-screen lg:grid-cols-[264px_1fr]">
-        <aside className="border-b border-white/10 bg-[#050510]/86 px-4 py-4 backdrop-blur-xl lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r lg:px-6 lg:py-7">
+      <div className="relative grid min-h-screen min-w-0 lg:grid-cols-[264px_1fr]">
+        <aside className="min-w-0 border-b border-white/10 bg-[#050510]/86 px-4 py-4 backdrop-blur-xl lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r lg:px-6 lg:py-7">
           <div className="flex h-full flex-col gap-6">
             <div className="flex items-center gap-3">
               <Sigil className="h-11 w-11" />
@@ -937,7 +954,7 @@ export default function CommandCenterPageClient() {
               </div>
             </div>
 
-            <nav className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
+            <nav className="flex max-w-full gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeSection === item.id;
@@ -975,13 +992,13 @@ export default function CommandCenterPageClient() {
           </div>
         </aside>
 
-        <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-8 lg:py-8 xl:px-9">
-          <header className="mb-7 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div>
-              <h1 className="text-[32px] font-medium leading-tight tracking-normal text-white">{sectionCopy[activeSection].title}</h1>
+        <main className="min-w-0 overflow-hidden px-4 py-5 sm:px-6 lg:px-8 lg:py-8 xl:px-9">
+          <header className="mb-7 flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <h1 className="break-words text-[30px] font-medium leading-tight tracking-normal text-white sm:text-[32px]">{sectionCopy[activeSection].title}</h1>
               <p className="mt-1 text-[16px] text-zinc-400">{sectionCopy[activeSection].subtitle}</p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <HeaderWalletButton connected={solanaWallet.connected} connecting={solanaWallet.connecting} onClick={() => void handleWalletAction()} />
             </div>
           </header>
@@ -1037,6 +1054,7 @@ export default function CommandCenterPageClient() {
                 setNewAgentName={setNewAgentName}
                 createAgent={createAgent}
                 useAgent={useAgent}
+                clearActiveAgent={clearActiveAgent}
                 lastOnboardedAgentId={lastOnboardedAgentId}
                 generatedAgentToken={generatedAgentToken}
                 generateAgentToken={generateAgentToken}
@@ -1098,8 +1116,8 @@ function OverviewSection({
   const railMode = latestRailReceipt?.magicblockRailMode ?? activeAgent?.executionMode ?? activeAgent?.preferredRail;
 
   return (
-    <div className="grid gap-4 xl:grid-cols-4">
-      <Panel className="min-h-[248px]">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-4">
+      <Panel className="min-h-[248px] min-w-0">
         <PanelTitle>Active Agent</PanelTitle>
         {activeAgent ? (
           <div className="mt-7 space-y-7">
@@ -1124,15 +1142,15 @@ function OverviewSection({
         )}
       </Panel>
 
-      <Panel className="min-h-[248px]">
+      <Panel className="min-h-[248px] min-w-0">
         <PanelTitle>Ghost Allowance</PanelTitle>
-        <div className="mt-5 grid gap-6 md:grid-cols-[220px_1fr] md:items-center xl:grid-cols-[190px_1fr] 2xl:grid-cols-[220px_1fr]">
+        <div className="mt-5 grid min-w-0 gap-6 sm:grid-cols-[180px_1fr] sm:items-center xl:grid-cols-[220px_1fr] 2xl:grid-cols-[176px_1fr]">
           <AllowanceRing
             current={activeAgent?.ghostAllowanceLive}
             max={activeAgent?.ghostAllowanceMax}
-            sizeClassName="h-44 w-44 xl:h-40 xl:w-40 2xl:h-44 2xl:w-44"
+            sizeClassName="h-44 w-44 sm:h-40 sm:w-40 xl:h-44 xl:w-44 2xl:h-40 2xl:w-40"
           />
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             <MetricRow label="Current" value={`${activeAgent?.ghostAllowanceLive ?? "0"} USDC`} />
             <MetricRow label="Max Allowance" value={`${activeAgent?.ghostAllowanceMax ?? "0"} USDC`} />
             <MetricRow label="Refill Rate" value={`${activeAgent?.ghostRefillAmount ?? "0"} USDC / ${activeAgent?.ghostRefillIntervalMinutes ?? 0}m`} />
@@ -1144,9 +1162,9 @@ function OverviewSection({
         </div>
       </Panel>
 
-      <Panel className="min-h-[248px]">
+      <Panel className="min-h-[248px] min-w-0">
         <PanelTitle>Spend Firewall</PanelTitle>
-        <div className="mt-5 grid gap-6 md:grid-cols-[176px_1fr] md:items-center">
+          <div className="mt-5 grid gap-6 lg:grid-cols-[176px_1fr] lg:items-center">
           <ShieldSigil />
           <div className="space-y-4">
             <MetricRow label="Daily Cap" value={`${activeAgent?.dailyCap ?? "0"} USDC`} />
@@ -1160,21 +1178,17 @@ function OverviewSection({
         </div>
       </Panel>
 
-      <Panel className="min-h-[248px]">
+      <Panel className="min-h-[248px] min-w-0">
         <PanelTitle>Execution Rail</PanelTitle>
         <div className="mt-5 space-y-4">
-          <MetricRow label="Primary Rail" value={activeAgent?.preferredRail ? formatRail(activeAgent.preferredRail) : "MagicBlock-ready"} />
+          <MetricRow label="Primary Rail" value={activeAgent?.preferredRail ? formatRail(activeAgent.preferredRail) : "MagicBlock Private Rail"} />
           <MetricRow label="Mode" value={formatMagicBlockMode(railMode)} />
-          <MetricRow label="MagicBlock Status" value={formatOverviewMagicBlockStatus(latestRailReceipt)} />
-          <MetricRow label="Settlement" value={formatSettlement(latestRailReceipt)} />
           <MetricRow label="Network" value="Devnet" />
+          <MetricRow label="Fallback" value="Explicit devnet proof" />
         </div>
-        <p className="mt-5 text-[14px] leading-6 text-zinc-400">
-          MagicBlock private rail attempted first. Native devnet fallback provides reliable confirmed settlement for demo.
-        </p>
       </Panel>
 
-      <Panel className="xl:col-span-3">
+      <Panel className="lg:col-span-2 2xl:col-span-3">
         <PanelTitle>Recent Receipts</PanelTitle>
         <DataTable
           columns={["TX Signature", "Amount", "Recipient", "Time", "Explorer"]}
@@ -1209,7 +1223,7 @@ function OverviewSection({
         <Panel>
           <PanelTitle>Live Summary</PanelTitle>
           <LineChart />
-          <div className="mt-5 grid grid-cols-3 divide-x divide-white/[0.08]">
+          <div className="mt-5 grid gap-3 sm:grid-cols-3 sm:divide-x sm:divide-white/[0.08]">
             <SummaryMetric label="Allowance" value={`${activeAgent?.ghostAllowanceLive ?? "0"} / ${activeAgent?.ghostAllowanceMax ?? "0"} USDC`} />
             <SummaryMetric label="Pending" value={String(pendingCount)} sublabel="Executions" />
             <SummaryMetric label="Confirmed" value={String(confirmedCount)} sublabel="Txs" />
@@ -1240,17 +1254,17 @@ function AllowanceSection({
 
   return (
     <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-      <Panel className="min-h-[520px]">
-        <div className="grid h-full gap-8 lg:grid-cols-[360px_1fr] lg:items-center">
+      <Panel className="min-h-[420px] lg:min-h-[520px]">
+        <div className="grid h-full gap-8 lg:grid-cols-[320px_1fr] xl:grid-cols-[360px_1fr] lg:items-center">
           <div className="flex justify-center">
-            <AllowanceRing current={activeAgent?.ghostAllowanceLive} max={activeAgent?.ghostAllowanceMax} sizeClassName="h-72 w-72" large />
+            <AllowanceRing current={activeAgent?.ghostAllowanceLive} max={activeAgent?.ghostAllowanceMax} sizeClassName="h-52 w-52 sm:h-60 sm:w-60 lg:h-64 lg:w-64 xl:h-72 xl:w-72" large />
           </div>
           <div className="space-y-5">
             <PanelTitle>Allowance Session</PanelTitle>
-            <div className="text-[39px] font-medium leading-tight text-white">
+            <div className="text-[30px] font-medium leading-tight text-white sm:text-[34px] lg:text-[39px]">
               {activeAgent?.ghostAllowanceLive ?? "0"} / {activeAgent?.ghostAllowanceMax ?? "0"} USDC
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 lg:grid-cols-2">
               <SoftMetric label="Refill Amount" value={`${activeAgent?.ghostRefillAmount ?? "0"} USDC`} />
               <SoftMetric label="Refill Interval" value={`${activeAgent?.ghostRefillIntervalMinutes ?? 0} minutes`} />
               <SoftMetric label="Next Refill" value={formatCountdown(runtime.nextRefillAt)} />
@@ -1258,7 +1272,7 @@ function AllowanceSection({
               <SoftMetric label="Clawback Status" value={runtime.clawbackCompleted ? "Completed" : runtime.clawbackPending ? "Queued" : "Standby"} />
               <SoftMetric label="Session Ends" value={formatCountdown(ghostTab?.expiresAt)} />
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid gap-2 sm:flex sm:flex-wrap">
               <ControlButton disabled title="No open endpoint is exposed in the web API.">
                 Open
               </ControlButton>
@@ -1292,7 +1306,7 @@ function AllowanceSection({
           <MetricRow label="Tick Cadence" value={formatMinutes(runtime.tickCadenceMinutes)} />
           <MetricRow label="Session Lifetime" value={formatMinutes(runtime.sessionLifetimeMinutes)} />
         </div>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <div className="mt-5 grid gap-3 lg:grid-cols-2">
           <SoftMetric label="Remaining Allowance" value={`${ghostTab?.allowanceLive ?? activeAgent?.ghostAllowanceLive ?? "0"} USDC`} />
           <SoftMetric label="Reserved Amount" value={`${reservedAmount} USDC`} />
           <SoftMetric label="Recoverable Amount" value={`${recoverableAmount} USDC`} />
@@ -1440,7 +1454,7 @@ function ExecutionsSection({
               </div>
             </div>
             <form className="mt-5 space-y-4" onSubmit={submitSpendIntent}>
-              <div className="grid gap-3 sm:grid-cols-[1fr_0.7fr]">
+              <div className="grid gap-3 lg:grid-cols-[1fr_0.7fr]">
                 <Field label="Amount">
                   <StyledInput
                     value={spendAmount}
@@ -1487,7 +1501,7 @@ function ExecutionsSection({
                       {spendResult.decision === "blocked" ? "Spend intent blocked" : "Pending execution created"}
                     </div>
                   </div>
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  <div className="mt-5 grid gap-3 lg:grid-cols-2">
                     <SoftMetric label="Paylink ID" value={spendResult.paylinkId ?? "None"} />
                     <SoftMetric label="Status" value={spendResult.status === "pending_execution" ? "pending execution" : spendResult.status ?? spendResult.decision ?? "pending execution"} />
                     <SoftMetric label="Rail" value={formatRail(spendResult.rail ?? "magicblock-private")} />
@@ -1563,6 +1577,7 @@ function AgentsSection({
   setNewAgentName,
   createAgent,
   useAgent,
+  clearActiveAgent,
   lastOnboardedAgentId,
   generatedAgentToken,
   generateAgentToken,
@@ -1574,18 +1589,26 @@ function AgentsSection({
   setNewAgentName: (value: string) => void;
   createAgent: (event: FormEvent<HTMLFormElement>) => void;
   useAgent: (agentId: string) => void;
+  clearActiveAgent: () => void;
   lastOnboardedAgentId: string | null;
   generatedAgentToken: GeneratedAgentTokenState | null;
   generateAgentToken: (agentId: string) => void;
   setNotice: (notice: Notice) => void;
 }) {
-  const activeAgent = agents.find((agent) => agent.isActive) ?? agents[0] ?? null;
+  const activeAgent = agents.find((agent) => agent.isActive) ?? null;
   const onboardingAgent = agents.find((agent) => agent.id === lastOnboardedAgentId) ?? activeAgent;
 
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
       <Panel>
         <PanelTitle>{dashboardSourceLabels.agentList}</PanelTitle>
+        {activeAgent ? (
+          <div className="mt-4 flex justify-end">
+            <ControlButton onClick={clearActiveAgent} disabled={isSubmitting}>
+              Disconnect / Clear active agent
+            </ControlButton>
+          </div>
+        ) : null}
         <div className="mt-6 grid gap-3">
           {agents.map((agent) => (
             <div key={agent.id} className="rounded-lg border border-white/[0.08] bg-white/[0.025] p-4">
@@ -1598,11 +1621,11 @@ function AgentsSection({
                   </div>
                   <div className="mt-2 text-[14px] text-zinc-500">{formatRail(agent.executionMode)}</div>
                 </div>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                   <SoftMetric label="Ghost Allowance" value={`${agent.ghostAllowanceLive}/${agent.ghostAllowanceMax}`} compact />
                   <SoftMetric label="Daily Remaining" value={`${agent.dailyLeft} USDC`} compact />
                 </div>
-                <div className="flex flex-wrap gap-2 lg:justify-end">
+                <div className="grid gap-2 sm:flex sm:flex-wrap lg:justify-end">
                   <ControlButton disabled={agent.isActive || isSubmitting} onClick={() => useAgent(agent.id)}>
                     Set Active Vault
                   </ControlButton>
@@ -1695,7 +1718,7 @@ function ConnectAgentPanel({
   return (
     <Panel>
       <PanelTitle>Connect Agent</PanelTitle>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap sm:items-center">
         <StatusBadge status="active">Agent Vault ready</StatusBadge>
         <StatusBadge status="pending">Connect your agent next</StatusBadge>
       </div>
@@ -1770,8 +1793,8 @@ function ConnectionMethod({
 }) {
   return (
     <div className="rounded-lg border border-white/[0.08] bg-white/[0.025] p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
           <div className="text-[17px] font-medium text-white">{title}</div>
           <p className="mt-1 text-[14px] text-zinc-500">{detail}</p>
         </div>
@@ -1825,12 +1848,12 @@ function SimulatorSection({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <PanelTitle>Rogue Simulator</PanelTitle>
           <span className="rounded-full border border-violet-300/20 bg-violet-500/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-violet-200">
-            DRY RUN — no pending execution created
+            DRY RUN - no pending execution created
           </span>
         </div>
         <p className="mt-4 text-[15px] text-zinc-400">Use Create Spend Intent for real devnet execution.</p>
         <form className="mt-6 space-y-4" onSubmit={runSimulator}>
-          <div className="grid gap-3 sm:grid-cols-[1fr_0.7fr]">
+          <div className="grid gap-3 lg:grid-cols-[1fr_0.7fr]">
             <Field label="Amount">
               <StyledInput
                 value={simulatorAmount}
@@ -1886,7 +1909,7 @@ function SimulatorSection({
                   {simulatorResult.decision === "blocked" ? "Would be blocked" : "Would be approved"}
                 </div>
               </div>
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="mt-5 grid gap-3 lg:grid-cols-2">
                 <SoftMetric label="Reason" value={simulatorResult.reason} />
                 <SoftMetric label="Agent" value={simulatorResult.agent} />
                 <SoftMetric label="Amount" value={`${simulatorResult.amount} ${simulatorResult.mint}`} />
@@ -1936,7 +1959,7 @@ function SettingsSection({
           <MetricRow label="Version" value="0.1.0" />
           <MetricRow label="Controller" value={compactAddress(controllerWallet)} />
         </div>
-        <div className="mt-6 flex flex-wrap gap-2">
+        <div className="mt-6 grid gap-2 sm:flex sm:flex-wrap">
           <ControlButton onClick={() => void resetDemoState()} disabled={isSubmitting}>
             Reset Demo State
           </ControlButton>
@@ -1948,7 +1971,7 @@ function SettingsSection({
 
       <Panel>
         <PanelTitle>Recipients</PanelTitle>
-        <form className="mt-6 grid gap-3 md:grid-cols-[0.7fr_1fr_auto]" onSubmit={addRecipient}>
+        <form className="mt-6 grid gap-3 lg:grid-cols-[0.7fr_1fr_auto]" onSubmit={addRecipient}>
           <StyledInput
             value={recipientLabel}
             onChange={(event) => setRecipientLabel(event.target.value)}
@@ -1990,7 +2013,7 @@ function SettingsSection({
 
 function Panel({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <section className={cn("rounded-lg border border-white/[0.10] bg-[#070711]/72 p-5 shadow-[0_0_0_1px_rgba(132,90,255,0.03),0_22px_70px_rgba(0,0,0,0.32)] backdrop-blur-xl", className)}>
+    <section className={cn("min-w-0 rounded-lg border border-white/[0.10] bg-[#070711]/72 p-5 shadow-[0_0_0_1px_rgba(132,90,255,0.03),0_22px_70px_rgba(0,0,0,0.32)] backdrop-blur-xl", className)}>
       {children}
     </section>
   );
@@ -2081,8 +2104,8 @@ function AllowanceRing({
     >
       <div className="grid h-full w-full place-items-center rounded-full border border-violet-300/18 bg-[radial-gradient(circle_at_50%_35%,rgba(147,74,255,0.20),rgba(4,4,11,0.94)_62%)]">
         <div className="text-center">
-          <div className={cn("font-light leading-none text-white", large ? "text-[60px]" : "text-[39px]")}>{current ?? "0"}</div>
-          <div className={cn("mt-2 text-zinc-300", large ? "text-[23px]" : "text-[18px]")}>/ {max ?? "0"}</div>
+          <div className={cn("font-light leading-none text-white", large ? "text-[46px] sm:text-[54px] xl:text-[60px]" : "text-[34px] sm:text-[39px]")}>{current ?? "0"}</div>
+          <div className={cn("mt-2 text-zinc-300", large ? "text-[19px] sm:text-[21px] xl:text-[23px]" : "text-[16px] sm:text-[18px]")}>/ {max ?? "0"}</div>
           <div className="mt-3 text-[14px] uppercase tracking-[0.1em] text-zinc-400">USDC</div>
         </div>
       </div>
@@ -2092,9 +2115,9 @@ function AllowanceRing({
 
 function MetricRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-white/[0.07] pb-3 last:border-b-0">
-      <span className="text-[15px] text-zinc-400">{label}</span>
-      <span className="text-right text-[15px] font-medium text-white">{value}</span>
+    <div className="flex min-w-0 items-center justify-between gap-4 border-b border-white/[0.07] pb-3 last:border-b-0">
+      <span className="min-w-0 text-[15px] text-zinc-400">{label}</span>
+      <span className="max-w-[62%] shrink-0 truncate whitespace-nowrap text-right text-[15px] font-medium text-white" title={value}>{value}</span>
     </div>
   );
 }
@@ -2113,9 +2136,9 @@ function LabelValue({ label, value, withCopy = false }: { label: string; value: 
 
 function SummaryMetric({ label, value, sublabel }: { label: string; value: string; sublabel?: string }) {
   return (
-    <div className="px-3 first:pl-0">
+    <div className="min-w-0 px-0 sm:px-3 sm:first:pl-0">
       <div className="text-[13px] uppercase tracking-[0.08em] text-zinc-500">{label}</div>
-      <div className="mt-2 text-[21px] text-white">{value}</div>
+      <div className="mt-2 truncate whitespace-nowrap text-[21px] text-white" title={value}>{value}</div>
       {sublabel ? <div className="mt-1 text-[13px] uppercase text-zinc-500">{sublabel}</div> : null}
     </div>
   );
@@ -2125,7 +2148,7 @@ function SoftMetric({ label, value, compact = false }: { label: string; value: s
   return (
     <div className={cn("rounded-lg border border-white/[0.08] bg-black/18", compact ? "p-3" : "p-4")}>
       <div className="text-[13px] uppercase tracking-[0.08em] text-zinc-500">{label}</div>
-      <div className={cn("mt-2 break-words font-medium text-white", compact ? "text-[15px]" : "text-[17px]")}>{value}</div>
+      <div className={cn("mt-2 min-w-0 break-words font-medium text-white", compact ? "text-[15px]" : "text-[17px]")}>{value}</div>
     </div>
   );
 }
@@ -2184,7 +2207,7 @@ function ControlButton({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { asAnchor?: boolean; href?: string }) {
   const baseClassName = cn(
-    "inline-flex min-h-10 items-center gap-2 rounded-lg border border-violet-300/18 bg-violet-400/8 px-3 text-[15px] font-medium text-violet-100 transition hover:border-violet-300/35 hover:bg-violet-400/14 focus-visible:border-violet-400/55 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(139,92,246,0.14)] disabled:cursor-not-allowed disabled:border-white/[0.06] disabled:bg-white/[0.03] disabled:text-zinc-500 disabled:opacity-60",
+    "inline-flex min-h-10 w-full min-w-0 items-center justify-center gap-2 rounded-lg border border-violet-300/18 bg-violet-400/8 px-3 text-center text-[15px] font-medium text-violet-100 transition hover:border-violet-300/35 hover:bg-violet-400/14 focus-visible:border-violet-400/55 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(139,92,246,0.14)] disabled:cursor-not-allowed disabled:border-white/[0.06] disabled:bg-white/[0.03] disabled:text-zinc-500 disabled:opacity-60 sm:w-auto",
     className
   );
 
@@ -2219,7 +2242,7 @@ function HeaderWalletButton({
       type="button"
       onClick={onClick}
       disabled={connecting}
-      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-violet-300/25 bg-[#132033]/88 px-4 text-[16px] font-medium text-violet-100 shadow-[0_0_0_1px_rgba(139,92,246,0.05),0_12px_32px_rgba(76,29,149,0.22)] transition hover:border-violet-300/45 hover:bg-[#172844] hover:text-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(139,92,246,0.18)] disabled:cursor-not-allowed disabled:opacity-60"
+      className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-violet-300/25 bg-[#132033]/88 px-4 text-[16px] font-medium text-violet-100 shadow-[0_0_0_1px_rgba(139,92,246,0.05),0_12px_32px_rgba(76,29,149,0.22)] transition hover:border-violet-300/45 hover:bg-[#172844] hover:text-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(139,92,246,0.18)] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
     >
       {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
       {connected ? "Disconnect wallet" : connecting ? "Connecting" : "Connect wallet"}
@@ -2281,9 +2304,9 @@ function DataTable({
   const rowCount = Array.isArray(children) ? children.length : children ? 1 : 0;
 
   return (
-    <div className="mt-5 overflow-hidden rounded-lg border border-white/[0.06]">
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-left text-[15px]">
+    <div className="mt-5 max-w-full overflow-hidden rounded-lg border border-white/[0.06]">
+      <div className="max-w-full overflow-x-auto">
+        <table className="min-w-max text-left text-[15px] [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
           <thead className="bg-white/[0.015] text-[13px] uppercase tracking-[0.06em] text-zinc-500">
             <tr>
               {columns.map((column) => (

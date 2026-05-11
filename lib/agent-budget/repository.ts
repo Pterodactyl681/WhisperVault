@@ -27,6 +27,7 @@ export interface AgentBudgetRepository {
   get(agentId: string): Promise<StoredAgentBudgetRecord | null>;
   list(): Promise<StoredAgentBudgetRecord[]>;
   save(record: StoredAgentBudgetRecord): Promise<StoredAgentBudgetRecord>;
+  deleteByOwner(owner: string): Promise<void>;
 }
 
 interface StoredAgentBudgetFile {
@@ -100,6 +101,14 @@ export class InMemoryAgentBudgetRepository implements AgentBudgetRepository {
     this.records.set(record.budget.agentId, stored);
     return cloneRecord(stored);
   }
+
+  async deleteByOwner(owner: string): Promise<void> {
+    for (const [agentId, record] of this.records.entries()) {
+      if (record.budget.owner === owner) {
+        this.records.delete(agentId);
+      }
+    }
+  }
 }
 
 export class DevFileAgentBudgetRepository implements AgentBudgetRepository {
@@ -139,6 +148,11 @@ export class DevFileAgentBudgetRepository implements AgentBudgetRepository {
     nextRecords.push(nextRecord);
     await this.writeRecords(nextRecords);
     return cloneRecord(nextRecord);
+  }
+
+  async deleteByOwner(owner: string): Promise<void> {
+    const records = await this.readRecords();
+    await this.writeRecords(records.filter((record) => record.budget.owner !== owner));
   }
 
   async removeDemoRecords(): Promise<StoredAgentBudgetRecord[]> {

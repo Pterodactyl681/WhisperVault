@@ -202,6 +202,16 @@ export class SupabaseAgentRegistryRepository implements AgentRegistryRepository 
     return context;
   }
 
+  async clearActiveAgent(controllerWallet: string): Promise<void> {
+    await this.client.delete(ACTIVE_AGENTS_TABLE, { controller_wallet: controllerWallet });
+  }
+
+  async clearControllerState(controllerWallet: string): Promise<void> {
+    await this.client.delete(ACTIVE_AGENTS_TABLE, { controller_wallet: controllerWallet });
+    await this.client.delete(RECIPIENTS_TABLE, { controller_wallet: controllerWallet });
+    await this.client.delete(AGENTS_TABLE, { controller_wallet: controllerWallet });
+  }
+
   async upsertRecipient(recipient: AgentRecipient): Promise<AgentRecipient> {
     const row: RecipientRow = {
       controller_wallet: recipient.controllerWallet,

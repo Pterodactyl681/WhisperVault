@@ -79,6 +79,22 @@ export const createDemoReadinessHttpHandlers = (options: DemoReadinessHttpOption
       try {
         const body = await readOptionalJsonObject(request);
         const controllerWallet = readControllerWallet(request, body, demoControllerWallet);
+        const mode = typeof body.mode === "string" ? body.mode.trim().toLowerCase() : "";
+
+        if (mode === "clear") {
+          const result = await options.service.clear(controllerWallet);
+
+          return json({
+            ready: false,
+            cleared: result.cleared,
+            controllerWallet: result.controllerWallet,
+            activeAgent: null,
+            activeAgentId: null,
+            ghostAllowance: "0/0 USDC",
+            pendingCount: 0
+          });
+        }
+
         const result = await options.service.reset(controllerWallet);
 
         return json({

@@ -401,6 +401,10 @@ export class AgentBudgetService {
     return normalized.map((record) => cloneBudget(record.budget));
   }
 
+  async clearBudgetsForOwner(owner: string): Promise<void> {
+    await this.repository.deleteByOwner(assertNonEmptyString(owner, "owner"));
+  }
+
   async resetAgentBudgetForDemo(input: ResetAgentBudgetForDemoInput): Promise<AgentBudget> {
     const now = this.now();
     const record = await this.getRecordOrThrow(input.agentId);

@@ -30,3 +30,8 @@ export interface DemoReadinessStatus {
   lastConfirmedTx: string | null;
   lastConfirmedPaylinkId: string | null;
 }
+
+export interface DemoReadinessClearResult {
+  controllerWallet: string;
+  cleared: true;
+}
