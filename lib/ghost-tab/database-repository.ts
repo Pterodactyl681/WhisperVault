@@ -28,20 +28,26 @@ interface GhostTabSessionRow {
   total_clawed_back: string;
   execution_mode: GhostTabSession["executionMode"];
   preferred_rail: GhostTabSession["preferredRail"];
+  refill_engine?: string | null;
+  per_status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 interface GhostTabEventRow {
   id: string;
-  session_id: string;
+  session_id: string | null;
   agent_id: string;
   controller_wallet: string;
-  type: GhostTabEvent["type"];
-  at: string;
+  type?: GhostTabEvent["type"] | null;
+  event_type?: GhostTabEvent["type"] | null;
+  at?: string | null;
   amount: string | null;
   allowance_before: string | null;
   allowance_after: string | null;
   reason: string | null;
   metadata: GhostTabEvent["metadata"] | null;
+  created_at?: string | null;
 }
 
 const SESSIONS_TABLE = "whispervault_ghost_tab_sessions";
@@ -94,11 +100,11 @@ const toSessionRow = (session: GhostTabSession): GhostTabSessionRow => ({
 
 const toEvent = (row: GhostTabEventRow): GhostTabEvent => ({
   id: row.id,
-  sessionId: row.session_id,
+  sessionId: row.session_id ?? "",
   agentId: row.agent_id,
   controllerWallet: row.controller_wallet,
-  type: row.type,
-  at: new Date(row.at).toISOString(),
+  type: row.type ?? row.event_type ?? "opened",
+  at: new Date(row.at ?? row.created_at ?? new Date().toISOString()).toISOString(),
   ...(row.amount ? { amount: row.amount } : {}),
   ...(row.allowance_before ? { allowanceBefore: row.allowance_before } : {}),
   ...(row.allowance_after ? { allowanceAfter: row.allowance_after } : {}),
@@ -112,12 +118,14 @@ const toEventRow = (event: GhostTabEvent): GhostTabEventRow => ({
   agent_id: event.agentId,
   controller_wallet: event.controllerWallet,
   type: event.type,
+  event_type: event.type,
   at: event.at,
   amount: event.amount ?? null,
   allowance_before: event.allowanceBefore ?? null,
   allowance_after: event.allowanceAfter ?? null,
   reason: event.reason ?? null,
-  metadata: event.metadata ? clone(event.metadata) : null
+  metadata: event.metadata ? clone(event.metadata) : null,
+  created_at: event.at
 });
 
 export class SupabaseGhostTabRepository implements GhostTabRepository {

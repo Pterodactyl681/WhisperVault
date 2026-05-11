@@ -84,6 +84,48 @@ test("agents API lists, creates, and switches active agents", async () => {
   assert.equal(body.agents.find((agent) => agent.name === "coffee-agent")?.dailyLeft, "30");
 });
 
+test("agents API generates BYO agent token for active vault", async () => {
+  const harness = await createHarness();
+  await createAgent(harness, "coffee-agent");
+
+  const tokenResponse = await harness.handlers.generateAgentToken(
+    new Request("http://localhost/api/agents/token", withOwner({ agentId: "coffee-agent" }))
+  );
+  const body = await readJson<{ agent: { id: string; hasApiToken: boolean }; token: string }>(tokenResponse);
+
+  assert.equal(tokenResponse.status, 200);
+  assert.equal(body.agent.id, "coffee-agent");
+  assert.equal(body.agent.hasApiToken, true);
+  assert.match(body.token, /^wva_/);
+});
+
+test("agent creation survives missing Ghost Tab tables with migration warning", async () => {
+  const harness = await createHarness();
+  const schemaError = new Error(
+    'Supabase POST whispervault_ghost_tab_sessions failed with 404 PGRST205: Could not find the table public.whispervault_ghost_tab_sessions in the schema cache'
+  );
+  const handlers = createCommandCenterHttpHandlers({
+    registryService: harness.agentRegistry,
+    budgetPolicy: harness.budgetPolicy,
+    paylinkService: harness.paylinkService,
+    ghostTabService: {
+      getSnapshot: async () => {
+        throw schemaError;
+      }
+    } as unknown as Parameters<typeof createCommandCenterHttpHandlers>[0]["ghostTabService"]
+  });
+
+  const response = await handlers.createAgent(new Request("http://localhost/api/agents/create", withOwner({ name: "coffee-agent" })));
+  const body = await readJson<{ agent: { id: string; isActive: boolean }; warning: string; message: string; nextAction: string }>(response);
+
+  assert.equal(response.status, 201);
+  assert.equal(body.agent.id, "coffee-agent");
+  assert.equal(body.agent.isActive, true);
+  assert.equal(body.message, "Agent Vault ready");
+  assert.equal(body.nextAction, "Connect your agent next");
+  assert.equal(body.warning, "Ghost Tab tables are not available. Run latest Supabase migrations.");
+});
+
 test("recipients API adds and selects default recipient for the active agent", async () => {
   const harness = await createHarness();
   await createAgent(harness);
@@ -203,7 +245,15 @@ test("dashboard source renders agent list and Ghost Allowance surfaces", async (
 
   assert.match(source, /Agent List/);
   assert.match(source, /Ghost Allowance/);
+  assert.match(source, /ER\/PER Runtime/);
+  assert.match(source, /Scheduled Tick Simulation/);
+  assert.match(source, /fallback-settlement/);
   assert.match(source, /Spend Intent Panel/);
+  assert.match(source, /Agent Vault ready/);
+  assert.match(source, /Connect your agent next/);
+  assert.match(source, /https:\/\/whisper-vault-sigma\.vercel\.app\/api\/agent\/intents/);
+  assert.match(source, /Copy curl example/);
+  assert.match(source, /Copy JS example/);
   assert.match(source, /\/api\/agents/);
 });
 
@@ -251,12 +301,18 @@ test("read-only Command Center APIs return empty arrays when schema is missing",
 
 test("combined Command Center schema safety migration includes required tables", async () => {
   const source = readFileSync(path.join(process.cwd(), "migrations", "0006_command_center_combined_schema.sql"), "utf8");
+  const runtimeSource = readFileSync(path.join(process.cwd(), "migrations", "0007_ghost_tab_runtime_schema.sql"), "utf8");
 
   assert.match(source, /create table if not exists whispervault_agents/);
   assert.match(source, /create table if not exists whispervault_agent_recipients/);
   assert.match(source, /create table if not exists whisperpay_payment_intents/);
   assert.match(source, /create table if not exists whispervault_ghost_tab_sessions/);
   assert.match(source, /add column if not exists pending_execution jsonb/);
+  assert.match(runtimeSource, /create table if not exists public\.whispervault_ghost_tab_sessions/);
+  assert.match(runtimeSource, /create table if not exists public\.whispervault_ghost_tab_events/);
+  assert.match(runtimeSource, /add column if not exists refill_engine/);
+  assert.match(runtimeSource, /add column if not exists per_status/);
+  assert.match(runtimeSource, /add column if not exists event_type/);
 });
 
 const run = async (): Promise<void> => {

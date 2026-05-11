@@ -47,6 +47,7 @@ const GITHUB_URL = "https://github.com/Pterodactyl681/WhisperVault";
 const X_URL = "#";
 const DOCS_URL = "https://github.com/Pterodactyl681/WhisperVault#readme";
 const TELEGRAM_REFERENCE_BOT_URL = process.env.NEXT_PUBLIC_TELEGRAM_BOT_URL?.trim() ?? "";
+const AGENT_INTENTS_ENDPOINT = "https://whisper-vault-sigma.vercel.app/api/agent/intents";
 const formControlClass =
   "h-11 w-full rounded-lg border border-violet-200/12 bg-[#080812] px-3 text-[16px] text-white caret-violet-300 outline-none transition placeholder:text-zinc-600 focus:border-violet-400/55 focus:bg-[#0B0B17] focus:shadow-[0_0_0_3px_rgba(139,92,246,0.14)] disabled:cursor-not-allowed disabled:border-white/[0.06] disabled:bg-[#07070D] disabled:text-zinc-600 [color-scheme:dark]";
 
@@ -79,6 +80,20 @@ interface CommandCenterGhostTabEvent {
   allowanceBefore?: string;
   allowanceAfter?: string;
   reason?: string;
+  label?: string;
+  synthetic?: boolean;
+}
+
+interface CommandCenterGhostRuntime {
+  sessionStatus: "idle" | "active" | "paused" | "closing" | "closed";
+  refillEngine: "offchain-lazy" | "er-scheduled";
+  nextRefillAt: string | null;
+  refillTickCount: number;
+  queuedRefill: string;
+  clawbackPending: boolean;
+  clawbackCompleted: boolean;
+  tickCadenceMinutes: number | null;
+  sessionLifetimeMinutes: number | null;
 }
 
 interface CommandCenterGhostTab {
@@ -95,6 +110,8 @@ interface CommandCenterGhostTab {
   totalRefilled: string;
   totalClawedBack: string;
   events: CommandCenterGhostTabEvent[];
+  runtime?: CommandCenterGhostRuntime;
+  timeline?: CommandCenterGhostTabEvent[];
 }
 
 interface CommandCenterRecipient {
@@ -115,8 +132,13 @@ interface CommandCenterReceipt {
   status: string;
   executionRail: string;
   settlementRailLabel: string;
+  txSignature?: string | null;
   txSignatureShort: string | null;
   explorerUrl: string | null;
+  magicblockRailAttempted?: boolean | null;
+  magicblockRailMode?: string | null;
+  magicblockRailStatus?: string | null;
+  fallbackUsed?: boolean | null;
   createdAt: string;
   confirmedAt: string | null;
   recipient: string;
@@ -155,6 +177,12 @@ type SimulatorResult =
       agent: string;
     }
   | null;
+
+interface GeneratedAgentTokenState {
+  agentId: string;
+  agentName: string;
+  token: string;
+}
 
 const navItems: { id: SectionId; label: string; icon: typeof Home }[] = [
   { id: "overview", label: "Overview", icon: Home },
@@ -221,7 +249,7 @@ const compactAddress = (value?: string | null): string => {
 
 const formatRail = (value?: string | null): string => {
   if (!value) {
-    return "Private Rail";
+    return "MagicBlock-ready";
   }
 
   if (value === "magicblock-private" || value === "magicblock-private-spl") {
@@ -237,6 +265,210 @@ const formatRail = (value?: string | null): string => {
   }
 
   return value;
+};
+
+const railLooksNativeFallback = (receipt?: CommandCenterReceipt | null): boolean =>
+  Boolean(receipt && (/native/i.test(receipt.executionRail) || /native fallback/i.test(receipt.settlementRailLabel)));
+
+const formatMagicBlockMode = (value?: string | null): string => {
+  if (!value) {
+    return "MagicBlock-ready";
+  }
+
+  const normalized = value.toLowerCase();
+
+  if (normalized.includes("payments-api") || normalized.includes("private-payments")) {
+    return "Private Payments API";
+  }
+
+  if (normalized.includes("mirage")) {
+    return "Mirage";
+  }
+
+  if (normalized === "off" || normalized.includes("disabled")) {
+    return "Off";
+  }
+
+  return value;
+};
+
+const formatReceiptMagicBlockMode = (receipt: CommandCenterReceipt): string => {
+  const value = receipt.magicblockRailMode ?? receipt.executionRail;
+  const normalized = value?.toLowerCase() ?? "";
+
+  if (normalized.includes("payments-api") || normalized.includes("private-payments")) {
+    return "payments-api";
+  }
+
+  if (normalized.includes("mirage") || normalized.includes("magicblock")) {
+    return "mirage";
+  }
+
+  if (normalized === "off" || normalized.includes("disabled")) {
+    return "off";
+  }
+
+  return "not configured";
+};
+
+const formatMagicBlockStatus = (receipt?: CommandCenterReceipt | null, readyFallback = false): string => {
+  const status = receipt?.magicblockRailStatus?.toLowerCase();
+
+  if (status) {
+    if (status.includes("confirm") || status.includes("success")) {
+      return "confirmed";
+    }
+
+    if (status.includes("fail") || status.includes("error")) {
+      return "failed";
+    }
+
+    if (status.includes("attempt") || status.includes("pending")) {
+      return "attempted";
+    }
+
+    if (status.includes("not configured") || status === "off") {
+      return "not configured";
+    }
+
+    return status;
+  }
+
+  if (receipt?.magicblockRailAttempted === true) {
+    return "attempted";
+  }
+
+  if (receipt?.magicblockRailAttempted === false) {
+    return "not configured";
+  }
+
+  return readyFallback ? "MagicBlock-ready" : "not configured";
+};
+
+const formatOverviewMagicBlockStatus = (receipt?: CommandCenterReceipt | null): string => {
+  const status = formatMagicBlockStatus(receipt, true);
+  return status === "MagicBlock-ready" ? status : status.charAt(0).toUpperCase() + status.slice(1);
+};
+
+const formatFallbackUsage = (receipt?: CommandCenterReceipt | null): string => {
+  if (receipt?.fallbackUsed === true || railLooksNativeFallback(receipt)) {
+    return "used";
+  }
+
+  if (receipt?.fallbackUsed === false) {
+    return "not used";
+  }
+
+  return "not recorded";
+};
+
+const formatSettlement = (receipt?: CommandCenterReceipt | null): string => {
+  if (receipt?.fallbackUsed === true || railLooksNativeFallback(receipt)) {
+    return "Solana Devnet Native Fallback";
+  }
+
+  return receipt?.settlementRailLabel && receipt.settlementRailLabel !== "Private Rail"
+    ? receipt.settlementRailLabel
+    : "MagicBlock-ready";
+};
+
+const getGhostRuntime = (ghostTab?: CommandCenterGhostTab | null): CommandCenterGhostRuntime => ({
+  sessionStatus:
+    ghostTab?.runtime?.sessionStatus ??
+    (ghostTab?.status === "clawed_back"
+      ? "closed"
+      : ghostTab?.status === "expired"
+        ? "closed"
+        : ghostTab?.status ?? "idle"),
+  refillEngine: ghostTab?.runtime?.refillEngine ?? "er-scheduled",
+  nextRefillAt: ghostTab?.runtime?.nextRefillAt ?? ghostTab?.nextRefillAt ?? null,
+  refillTickCount: ghostTab?.runtime?.refillTickCount ?? ghostTab?.events?.filter((event) => event.type === "refill_tick").length ?? 0,
+  queuedRefill: ghostTab?.runtime?.queuedRefill ?? ghostTab?.refillAmount ?? "0",
+  clawbackPending: ghostTab?.runtime?.clawbackPending ?? false,
+  clawbackCompleted: ghostTab?.runtime?.clawbackCompleted ?? (ghostTab?.status === "clawed_back" || numericValue(ghostTab?.totalClawedBack) > 0),
+  tickCadenceMinutes: ghostTab?.runtime?.tickCadenceMinutes ?? ghostTab?.refillIntervalMinutes ?? null,
+  sessionLifetimeMinutes:
+    ghostTab?.runtime?.sessionLifetimeMinutes ??
+    (ghostTab?.openedAt && ghostTab.expiresAt
+      ? Math.max(1, Math.round((Date.parse(ghostTab.expiresAt) - Date.parse(ghostTab.openedAt)) / 60000))
+      : null)
+});
+
+const formatRuntimeStatus = (value?: string | null): string => {
+  if (!value) {
+    return "Idle";
+  }
+
+  return value.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
+const formatRefillEngine = (value?: string | null): string =>
+  value === "er-scheduled" ? "Scheduled Tick Simulation" : "Offchain Lazy";
+
+const formatMinutes = (value?: number | null): string => {
+  if (!value || value <= 0) {
+    return "Not set";
+  }
+
+  return value < 60 ? `${value} minutes` : `${Math.round(value / 60)} hours`;
+};
+
+const sumReceiptAmounts = (receipts: CommandCenterReceipt[], predicate: (receipt: CommandCenterReceipt) => boolean): string => {
+  const total = receipts.reduce((sum, receipt) => {
+    if (!predicate(receipt)) {
+      return sum;
+    }
+
+    return sum + numericValue(receipt.amount);
+  }, 0);
+
+  return Number.isInteger(total) ? String(total) : total.toFixed(2);
+};
+
+const buildGhostTimeline = (
+  ghostTab: CommandCenterGhostTab | null,
+  activeAgent: CommandCenterAgent | null,
+  receipts: CommandCenterReceipt[]
+): CommandCenterGhostTabEvent[] => {
+  const base = ghostTab?.timeline?.length ? ghostTab.timeline : ghostTab?.events ?? [];
+  const items = base.map((event) => ({
+    ...event,
+    label: event.label ?? event.type.replace(/_/g, " ")
+  }));
+  const confirmedReceipts = receipts.filter((receipt) => receipt.agent === activeAgent?.id && receipt.status === "confirmed" && receipt.confirmedAt);
+
+  for (const receipt of confirmedReceipts) {
+    items.push({
+      id: `${receipt.id}:spend_confirmed`,
+      type: "spend_confirmed",
+      label: "Spend confirmed",
+      at: receipt.confirmedAt ?? receipt.createdAt,
+      amount: receipt.amount,
+      synthetic: true
+    });
+  }
+
+  return items.sort((left, right) => Date.parse(left.at) - Date.parse(right.at));
+};
+
+const formatExecutionQueueState = (receipt: CommandCenterReceipt): string => {
+  if (receipt.status === "failed" || receipt.status === "blocked") {
+    return "failed";
+  }
+
+  if (receipt.fallbackUsed === true || railLooksNativeFallback(receipt)) {
+    return "fallback-settlement";
+  }
+
+  if (receipt.status === "confirmed") {
+    return "confirmed";
+  }
+
+  if (receipt.magicblockRailAttempted || receipt.magicblockRailStatus === "attempted") {
+    return "awaiting-rail";
+  }
+
+  return "queued-private";
 };
 
 const formatCountdown = (iso?: string | null): string => {
@@ -280,7 +512,14 @@ const statusTone = (status?: string | null): "success" | "warning" | "danger" | 
     return "success";
   }
 
-  if (status === "pending" || status === "pending_execution" || status === "paused") {
+  if (
+    status === "pending" ||
+    status === "pending_execution" ||
+    status === "paused" ||
+    status === "queued-private" ||
+    status === "awaiting-rail" ||
+    status === "fallback-settlement"
+  ) {
     return "warning";
   }
 
@@ -304,6 +543,15 @@ const percentOf = (current?: string | null, max?: string | null): number => {
   }
 
   return Math.max(0, Math.min(100, (numericValue(current) / maxValue) * 100));
+};
+
+const copyText = async (value: string): Promise<boolean> => {
+  if (!navigator.clipboard?.writeText) {
+    return false;
+  }
+
+  await navigator.clipboard.writeText(value);
+  return true;
 };
 
 export default function CommandCenterPageClient() {
@@ -331,6 +579,8 @@ export default function CommandCenterPageClient() {
   const [simulatorGoal, setSimulatorGoal] = useState("");
   const [simulatorRecipient, setSimulatorRecipient] = useState("");
   const [simulatorResult, setSimulatorResult] = useState<SimulatorResult>(null);
+  const [lastOnboardedAgentId, setLastOnboardedAgentId] = useState<string | null>(null);
+  const [generatedAgentToken, setGeneratedAgentToken] = useState<GeneratedAgentTokenState | null>(null);
 
   const activeAgent = useMemo(() => agents.find((agent) => agent.isActive) ?? agents[0] ?? null, [agents]);
   const confirmedReceipts = useMemo(() => receipts.filter((receipt) => receipt.status === "confirmed"), [receipts]);
@@ -413,10 +663,22 @@ export default function CommandCenterPageClient() {
     setIsSubmitting(true);
 
     try {
-      await submitJson("/api/agents/create", { name: newAgentName });
+      const payload = await submitJson("/api/agents/create", { name: newAgentName }) as {
+        agent?: CommandCenterAgent;
+        warning?: string;
+        message?: string;
+        nextAction?: string;
+      };
       setNewAgentName("");
-      setNotice({ tone: "success", message: "Agent Vault created and selected." });
+      setLastOnboardedAgentId(payload.agent?.id ?? null);
+      setGeneratedAgentToken(null);
       await loadData();
+      setNotice({
+        tone: payload.warning ? "warning" : "success",
+        message: payload.warning
+          ? `${payload.message ?? "Agent Vault ready"}. ${payload.nextAction ?? "Connect your agent next"}. ${payload.warning}`
+          : `${payload.message ?? "Agent Vault ready"}. ${payload.nextAction ?? "Connect your agent next"}.`
+      });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Agent could not be created." });
     } finally {
@@ -429,10 +691,40 @@ export default function CommandCenterPageClient() {
 
     try {
       await submitJson("/api/agents/use", { agentId });
-      setNotice({ tone: "success", message: "Active Agent Vault updated." });
+      setLastOnboardedAgentId(agentId);
+      setGeneratedAgentToken(null);
       await loadData();
+      setNotice({ tone: "success", message: "Active Agent Vault updated." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Agent could not be selected." });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const generateAgentToken = async (agentId: string) => {
+    setIsSubmitting(true);
+
+    try {
+      const payload = await submitJson("/api/agents/token", { agentId }) as {
+        agent?: CommandCenterAgent;
+        token?: string;
+      };
+      const token = payload.token ?? "";
+
+      if (!token) {
+        throw new Error("Agent token was not returned.");
+      }
+
+      setGeneratedAgentToken({
+        agentId: payload.agent?.id ?? agentId,
+        agentName: payload.agent?.name ?? agentId,
+        token
+      });
+      await loadData();
+      setNotice({ tone: "success", message: "Agent token generated. Connect your agent next." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Agent token could not be generated." });
     } finally {
       setIsSubmitting(false);
     }
@@ -698,7 +990,12 @@ export default function CommandCenterPageClient() {
               />
             ) : null}
             {activeSection === "allowance" ? (
-              <AllowanceSection activeAgent={activeAgent} isSubmitting={isSubmitting} updateBudgetStatus={updateBudgetStatus} />
+              <AllowanceSection
+                activeAgent={activeAgent}
+                receipts={receipts}
+                isSubmitting={isSubmitting}
+                updateBudgetStatus={updateBudgetStatus}
+              />
             ) : null}
             {activeSection === "firewall" ? (
               <FirewallSection activeAgent={activeAgent} recipients={recipients} blockedAttempts={blockedAttempts} setSection={setActiveSection} />
@@ -730,6 +1027,10 @@ export default function CommandCenterPageClient() {
                 setNewAgentName={setNewAgentName}
                 createAgent={createAgent}
                 useAgent={useAgent}
+                lastOnboardedAgentId={lastOnboardedAgentId}
+                generatedAgentToken={generatedAgentToken}
+                generateAgentToken={generateAgentToken}
+                setNotice={setNotice}
               />
             ) : null}
             {activeSection === "simulator" ? (
@@ -783,9 +1084,11 @@ function OverviewSection({
   setSection: (section: SectionId) => void;
 }) {
   const recentReceipts = receipts.slice(0, 5);
+  const latestRailReceipt = receipts.find((receipt) => receipt.magicblockRailStatus || receipt.fallbackUsed !== undefined || receipt.executionRail);
+  const railMode = latestRailReceipt?.magicblockRailMode ?? activeAgent?.executionMode ?? activeAgent?.preferredRail;
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1fr_1.3fr_1.35fr]">
+    <div className="grid gap-4 xl:grid-cols-4">
       <Panel className="min-h-[248px]">
         <PanelTitle>Active Agent</PanelTitle>
         {activeAgent ? (
@@ -847,7 +1150,21 @@ function OverviewSection({
         </div>
       </Panel>
 
-      <Panel className="xl:col-span-2">
+      <Panel className="min-h-[248px]">
+        <PanelTitle>Execution Rail</PanelTitle>
+        <div className="mt-5 space-y-4">
+          <MetricRow label="Primary Rail" value={activeAgent?.preferredRail ? formatRail(activeAgent.preferredRail) : "MagicBlock-ready"} />
+          <MetricRow label="Mode" value={formatMagicBlockMode(railMode)} />
+          <MetricRow label="MagicBlock Status" value={formatOverviewMagicBlockStatus(latestRailReceipt)} />
+          <MetricRow label="Settlement" value={formatSettlement(latestRailReceipt)} />
+          <MetricRow label="Network" value="Devnet" />
+        </div>
+        <p className="mt-5 text-[14px] leading-6 text-zinc-400">
+          MagicBlock private rail attempted first. Native devnet fallback provides reliable confirmed settlement for demo.
+        </p>
+      </Panel>
+
+      <Panel className="xl:col-span-3">
         <PanelTitle>Recent Receipts</PanelTitle>
         <DataTable
           columns={["TX Signature", "Amount", "Recipient", "Time", "Explorer"]}
@@ -895,14 +1212,21 @@ function OverviewSection({
 
 function AllowanceSection({
   activeAgent,
+  receipts,
   isSubmitting,
   updateBudgetStatus
 }: {
   activeAgent: CommandCenterAgent | null;
+  receipts: CommandCenterReceipt[];
   isSubmitting: boolean;
   updateBudgetStatus: (agentId: string, action: "pause" | "resume") => void;
 }) {
   const ghostTab = activeAgent?.ghostTab ?? null;
+  const runtime = getGhostRuntime(ghostTab);
+  const timeline = buildGhostTimeline(ghostTab, activeAgent, receipts);
+  const activeAgentReceipts = receipts.filter((receipt) => receipt.agent === activeAgent?.id);
+  const reservedAmount = sumReceiptAmounts(activeAgentReceipts, (receipt) => receipt.status === "pending" || receipt.status === "pending_execution");
+  const recoverableAmount = runtime.clawbackCompleted ? "0" : ghostTab?.allowanceLive ?? activeAgent?.ghostAllowanceLive ?? "0";
 
   return (
     <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
@@ -919,9 +1243,9 @@ function AllowanceSection({
             <div className="grid gap-3 sm:grid-cols-2">
               <SoftMetric label="Refill Amount" value={`${activeAgent?.ghostRefillAmount ?? "0"} USDC`} />
               <SoftMetric label="Refill Interval" value={`${activeAgent?.ghostRefillIntervalMinutes ?? 0} minutes`} />
-              <SoftMetric label="Next Refill" value={formatCountdown(ghostTab?.nextRefillAt)} />
-              <SoftMetric label="Session Status" value={ghostTab?.status ?? activeAgent?.status ?? "Unavailable"} />
-              <SoftMetric label="Clawback Status" value={numericValue(ghostTab?.totalClawedBack) > 0 ? `${ghostTab?.totalClawedBack} USDC` : "No clawback"} />
+              <SoftMetric label="Next Refill" value={formatCountdown(runtime.nextRefillAt)} />
+              <SoftMetric label="Session Status" value={formatRuntimeStatus(runtime.sessionStatus)} />
+              <SoftMetric label="Clawback Status" value={runtime.clawbackCompleted ? "Completed" : runtime.clawbackPending ? "Queued" : "Standby"} />
               <SoftMetric label="Session Ends" value={formatCountdown(ghostTab?.expiresAt)} />
             </div>
             <div className="flex flex-wrap gap-2">
@@ -949,19 +1273,40 @@ function AllowanceSection({
       </Panel>
 
       <Panel>
-        <PanelTitle>Ghost Tab Timeline</PanelTitle>
+        <PanelTitle>ER/PER Runtime</PanelTitle>
+        <div className="mt-6 grid gap-3">
+          <MetricRow label="Runtime Engine" value="MagicBlock ER-ready" />
+          <MetricRow label="Refill Mode" value={formatRefillEngine(runtime.refillEngine)} />
+          <MetricRow label="Privacy Rail" value="Mirage Private Rail" />
+          <MetricRow label="Settlement" value="Native Devnet Fallback" />
+          <MetricRow label="Tick Cadence" value={formatMinutes(runtime.tickCadenceMinutes)} />
+          <MetricRow label="Session Lifetime" value={formatMinutes(runtime.sessionLifetimeMinutes)} />
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <SoftMetric label="Remaining Allowance" value={`${ghostTab?.allowanceLive ?? activeAgent?.ghostAllowanceLive ?? "0"} USDC`} />
+          <SoftMetric label="Reserved Amount" value={`${reservedAmount} USDC`} />
+          <SoftMetric label="Recoverable Amount" value={`${recoverableAmount} USDC`} />
+          <SoftMetric label="Refill Ticks" value={String(runtime.refillTickCount)} />
+          <SoftMetric label="Queued Refill" value={`${runtime.queuedRefill} USDC`} />
+          <SoftMetric label="Clawback" value={runtime.clawbackCompleted ? "completed" : runtime.clawbackPending ? "queued" : "not queued"} />
+        </div>
+      </Panel>
+
+      <Panel className="xl:col-span-2">
+        <PanelTitle>Ghost Timeline</PanelTitle>
         <div className="mt-6 space-y-3">
-          {ghostTab?.events?.length ? (
-            ghostTab.events.map((event) => (
+          {timeline.length ? (
+            timeline.map((event) => (
               <div key={event.id} className="rounded-lg border border-white/[0.08] bg-white/[0.025] p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-[16px] font-medium capitalize text-white">{event.type.replace(/_/g, " ")}</div>
+                    <div className="text-[16px] font-medium text-white">{event.label ?? event.type.replace(/_/g, " ")}</div>
                     <div className="mt-1 text-[14px] text-zinc-500">{formatDateTime(event.at)}</div>
                   </div>
                   {event.amount ? <StatusBadge status="confirmed">{event.amount} USDC</StatusBadge> : null}
                 </div>
                 {event.reason ? <p className="mt-3 text-[15px] text-zinc-400">{event.reason}</p> : null}
+                {event.synthetic ? <p className="mt-2 text-[13px] text-zinc-500">runtime simulation</p> : null}
               </div>
             ))
           ) : (
@@ -1151,7 +1496,7 @@ function ExecutionsSection({
       <Panel>
         <PanelTitle>Execution Queue</PanelTitle>
         <DataTable
-          columns={["Paylink ID", "Agent", "Amount", "Recipient", "Status", "Rail", "Time", "Action"]}
+          columns={["Paylink ID", "Agent", "Amount", "Recipient", "Primary Rail", "Fallback Used", "Queue State", "Time", "Action"]}
           emptyTitle="No executions"
           emptyBody="Pending, blocked, confirmed, and failed executions will appear here."
         >
@@ -1161,8 +1506,9 @@ function ExecutionsSection({
               <td className="px-3 py-4 text-zinc-300">{receipt.agent}</td>
               <td className="px-3 py-4 text-white">{receipt.amount} {receipt.mint}</td>
               <td className="px-3 py-4 text-zinc-300">{compactAddress(receipt.recipient)}</td>
-              <td className="px-3 py-4"><StatusBadge status={receipt.status} /></td>
               <td className="px-3 py-4 text-zinc-300">{formatRail(receipt.executionRail)}</td>
+              <td className="px-3 py-4 text-zinc-300">{formatFallbackUsage(receipt)}</td>
+              <td className="px-3 py-4"><StatusBadge status={formatExecutionQueueState(receipt)} /></td>
               <td className="px-3 py-4 text-zinc-300">{formatCountdown(receipt.createdAt)}</td>
               <td className="px-3 py-4"><ExplorerLink url={receipt.explorerUrl} /></td>
             </tr>
@@ -1178,17 +1524,19 @@ function ReceiptsSection({ receipts }: { receipts: CommandCenterReceipt[] }) {
     <Panel>
       <PanelTitle>Confirmed Receipts</PanelTitle>
       <DataTable
-        columns={["Receipt ID", "TX Signature", "Amount", "Recipient", "Execution Rail", "Status", "Explorer"]}
+        columns={["Receipt ID", "MagicBlock Rail", "Mode", "Fallback", "Devnet TX Signature", "Amount", "Recipient", "Status", "Explorer"]}
         emptyTitle="No confirmed receipts"
         emptyBody="Settled devnet transactions will appear here with explorer links."
       >
         {receipts.map((receipt) => (
           <tr key={receipt.id} className="border-t border-white/[0.07]">
             <td className="px-3 py-4 font-medium text-violet-300">{receipt.id}</td>
-            <td className="px-3 py-4 text-zinc-300">{receipt.txSignatureShort ?? "Pending"}</td>
+            <td className="px-3 py-4 text-zinc-300">{formatMagicBlockStatus(receipt)}</td>
+            <td className="px-3 py-4 text-zinc-300">{formatReceiptMagicBlockMode(receipt)}</td>
+            <td className="px-3 py-4 text-zinc-300">{formatFallbackUsage(receipt)}</td>
+            <td className="px-3 py-4 text-zinc-300">{receipt.txSignature ?? receipt.txSignatureShort ?? "not recorded"}</td>
             <td className="px-3 py-4 text-white">{receipt.amount} {receipt.mint}</td>
             <td className="px-3 py-4 text-zinc-300">{compactAddress(receipt.recipient)}</td>
-            <td className="px-3 py-4 text-zinc-300">{formatRail(receipt.executionRail)}</td>
             <td className="px-3 py-4"><StatusBadge status={receipt.status} /></td>
             <td className="px-3 py-4"><ExplorerLink url={receipt.explorerUrl} /></td>
           </tr>
@@ -1204,7 +1552,11 @@ function AgentsSection({
   newAgentName,
   setNewAgentName,
   createAgent,
-  useAgent
+  useAgent,
+  lastOnboardedAgentId,
+  generatedAgentToken,
+  generateAgentToken,
+  setNotice
 }: {
   agents: CommandCenterAgent[];
   isSubmitting: boolean;
@@ -1212,7 +1564,14 @@ function AgentsSection({
   setNewAgentName: (value: string) => void;
   createAgent: (event: FormEvent<HTMLFormElement>) => void;
   useAgent: (agentId: string) => void;
+  lastOnboardedAgentId: string | null;
+  generatedAgentToken: GeneratedAgentTokenState | null;
+  generateAgentToken: (agentId: string) => void;
+  setNotice: (notice: Notice) => void;
 }) {
+  const activeAgent = agents.find((agent) => agent.isActive) ?? agents[0] ?? null;
+  const onboardingAgent = agents.find((agent) => agent.id === lastOnboardedAgentId) ?? activeAgent;
+
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
       <Panel>
@@ -1264,21 +1623,74 @@ function AgentsSection({
           </form>
         </Panel>
 
-        {agents.length > 0 ? <ConnectAgentPanel agent={agents.find((agent) => agent.isActive) ?? agents[0] ?? null} /> : null}
+        {agents.length > 0 ? (
+          <ConnectAgentPanel
+            agent={onboardingAgent}
+            isSubmitting={isSubmitting}
+            generatedAgentToken={generatedAgentToken}
+            generateAgentToken={generateAgentToken}
+            setNotice={setNotice}
+          />
+        ) : null}
       </div>
     </div>
   );
 }
 
-function ConnectAgentPanel({ agent }: { agent: CommandCenterAgent | null }) {
+function ConnectAgentPanel({
+  agent,
+  isSubmitting,
+  generatedAgentToken,
+  generateAgentToken,
+  setNotice
+}: {
+  agent: CommandCenterAgent | null;
+  isSubmitting: boolean;
+  generatedAgentToken: GeneratedAgentTokenState | null;
+  generateAgentToken: (agentId: string) => void;
+  setNotice: (notice: Notice) => void;
+}) {
   const agentName = agent?.name ?? "agent-name";
+  const token = generatedAgentToken && generatedAgentToken.agentId === agent?.id ? generatedAgentToken.token : "<token>";
+  const curlExample = [
+    `curl -X POST ${AGENT_INTENTS_ENDPOINT}`,
+    `  -H "Authorization: Bearer ${token}"`,
+    `  -H "Content-Type: application/json"`,
+    `  -d "{\"goal\":\"buy coffee\",\"amount\":\"1\",\"mint\":\"USDC\",\"recipient\":\"<recipient-wallet>\"}"`
+  ].join(" \\\n");
+  const jsExample = [
+    `await fetch("${AGENT_INTENTS_ENDPOINT}", {`,
+    `  method: "POST",`,
+    `  headers: {`,
+    `    Authorization: "Bearer ${token}",`,
+    `    "Content-Type": "application/json"`,
+    `  },`,
+    `  body: JSON.stringify({`,
+    `    goal: "buy coffee",`,
+    `    amount: "1",`,
+    `    mint: "USDC",`,
+    `    recipient: "<recipient-wallet>"`,
+    `  })`,
+    `});`
+  ].join("\n");
   const telegramBotAvailable = TELEGRAM_REFERENCE_BOT_URL.length > 0;
+  const copySnippet = async (label: string, value: string) => {
+    const copied = await copyText(value);
+    setNotice({
+      tone: copied ? "success" : "warning",
+      message: copied ? `${label} copied.` : `${label} is ready to copy.`
+    });
+  };
 
   return (
     <Panel>
       <PanelTitle>Connect Agent</PanelTitle>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <StatusBadge status="active">Agent Vault ready</StatusBadge>
+        <StatusBadge status="pending">Connect your agent next</StatusBadge>
+      </div>
       <p className="mt-4 text-[15px] text-zinc-400">
-        Web Command Center is the controller/admin surface. Telegram is the reference external agent interface. BYO Agent API is for custom AI agents.
+        Adding an Agent Vault creates policy and limits. The agent becomes connected when it uses Telegram or the API token to submit spend intents.
       </p>
 
       <div className="mt-5 grid gap-3">
@@ -1292,7 +1704,6 @@ function ConnectAgentPanel({ agent }: { agent: CommandCenterAgent | null }) {
             </ControlButton>
           }
           steps={[
-            <>Use <code className="text-violet-200">/link &lt;code&gt;</code> if needed</>,
             <>Use <code className="text-violet-200">{`/agent use ${agentName}`}</code></>,
             <>Use <code className="text-violet-200">/spend 1 buy coffee</code></>
           ]}
@@ -1302,18 +1713,37 @@ function ConnectAgentPanel({ agent }: { agent: CommandCenterAgent | null }) {
           title="BYO Agent API"
           detail="Give a custom AI agent its own token, then submit spend intents through the controller API."
           action={
-            <ControlButton disabled title="Token generation is available through the existing agent registry flow, without a web endpoint change.">
+            <ControlButton disabled={!agent || isSubmitting} onClick={() => agent ? generateAgentToken(agent.id) : undefined}>
               <KeyRound className="h-3.5 w-3.5" />
               Generate Agent Token
             </ControlButton>
           }
           steps={[
-            <>POST <code className="text-violet-200">/api/agent/intents</code></>,
-            <>Authorization: <code className="text-violet-200">Bearer &lt;token&gt;</code></>
+            <>POST <code className="text-violet-200">{AGENT_INTENTS_ENDPOINT}</code></>,
+            <>Authorization: <code className="text-violet-200">Bearer {token}</code></>,
+            <SnippetAction key="curl" label="Copy curl example" value={curlExample} onCopy={copySnippet} />,
+            <SnippetAction key="js" label="Copy JS example" value={jsExample} onCopy={copySnippet} />
           ]}
         />
       </div>
     </Panel>
+  );
+}
+
+function SnippetAction({
+  label,
+  value,
+  onCopy
+}: {
+  label: string;
+  value: string;
+  onCopy: (label: string, value: string) => void;
+}) {
+  return (
+    <button type="button" onClick={() => onCopy(label, value)} className="inline-flex items-center gap-2 text-violet-200 transition hover:text-white">
+      <Copy className="h-3.5 w-3.5" />
+      {label}
+    </button>
   );
 }
 

@@ -19,6 +19,7 @@ interface CommandCenterHttpOptions {
 interface CommandCenterHttpHandlers {
   listAgents: (request: Request) => Promise<Response>;
   createAgent: (request: Request) => Promise<Response>;
+  generateAgentToken: (request: Request) => Promise<Response>;
   useAgent: (request: Request) => Promise<Response>;
   listRecipients: (request: Request) => Promise<Response>;
   addRecipient: (request: Request) => Promise<Response>;
@@ -38,6 +39,7 @@ type AgentPlanPayload = {
 type CommandCenterRouteName =
   | "/api/agents"
   | "/api/agents/create"
+  | "/api/agents/token"
   | "/api/agents/use"
   | "/api/recipients"
   | "/api/recipients/add"
@@ -77,6 +79,8 @@ const logRouteError = (route: CommandCenterRouteName, error: unknown): void => {
 const logSchemaFallback = (route: CommandCenterRouteName, detail: string, error: unknown): void => {
   console.warn(`[Command Center] ${route} returning empty data because ${detail}: ${errorMessage(error)}`);
 };
+
+const GHOST_TAB_MIGRATION_WARNING = "Ghost Tab tables are not available. Run latest Supabase migrations.";
 
 const normalizeAgentName = (value: string): string =>
   value
@@ -150,14 +154,13 @@ const serializeGhostTab = (snapshot?: GhostTabSnapshot | null) => {
   }
 
   const session = snapshot.session;
-  const nextRefillAt =
-    session.status === "active"
-      ? new Date(Date.parse(session.lastRefillAt) + session.refillIntervalMinutes * 60 * 1000).toISOString()
-      : null;
+  const nextRefillAt = snapshot.runtime.nextRefillAt;
 
   return {
     ...session,
     nextRefillAt,
+    runtime: snapshot.runtime,
+    timeline: snapshot.timeline.slice(-12).reverse(),
     events: snapshot.events.slice(-8).reverse()
   };
 };
@@ -288,6 +291,31 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
     return agent;
   };
 
+  const getGhostSnapshotForAgent = async (
+    route: CommandCenterRouteName,
+    agentId: string
+  ): Promise<{ ghostTab: GhostTabSnapshot | null; warning?: string }> => {
+    if (!options.ghostTabService) {
+      return { ghostTab: null };
+    }
+
+    try {
+      return {
+        ghostTab: await options.ghostTabService.getSnapshot(agentId)
+      };
+    } catch (error) {
+      if (!isMissingSchemaError(error)) {
+        throw error;
+      }
+
+      logSchemaFallback(route, "Ghost Tab schema is not migrated", error);
+      return {
+        ghostTab: null,
+        warning: GHOST_TAB_MIGRATION_WARNING
+      };
+    }
+  };
+
   return {
     listAgents: async (request) => {
       try {
@@ -354,16 +382,51 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
         });
 
         await options.registryService.setActiveAgent(controllerWallet, agent.id);
+        const ghostSnapshot = await getGhostSnapshotForAgent("/api/agents/create", agent.id);
 
         return json(
           {
             controllerWallet,
-            agent: serializeAgent(agent, true, options.ghostTabService ? await options.ghostTabService.getSnapshot(agent.id) : null)
+            activeAgentId: agent.id,
+            status: "ready",
+            message: "Agent Vault ready",
+            nextAction: "Connect your agent next",
+            agent: serializeAgent(agent, true, ghostSnapshot.ghostTab),
+            ...(ghostSnapshot.warning ? { warning: ghostSnapshot.warning } : {})
           },
           201
         );
       } catch (error) {
         logRouteError("/api/agents/create", error);
+        return handleKnownError(error);
+      }
+    },
+
+    generateAgentToken: async (request) => {
+      try {
+        const body = await parseJsonObject(request);
+        const controllerWallet = readControllerWallet(request, body, demoControllerWallet);
+        const { ownedBudgets } = await loadAgentStateForRead("/api/agents/token", controllerWallet);
+        const agentName =
+          typeof body.agentId === "string" && body.agentId.trim()
+            ? body.agentId.trim()
+            : typeof body.name === "string"
+              ? body.name.trim()
+              : "";
+
+        if (!agentName) {
+          throw new Error("agentId is required.");
+        }
+
+        const generated = await options.registryService.generateToken(controllerWallet, agentName, ownedBudgets);
+
+        return json({
+          controllerWallet,
+          agent: serializeAgent(generated.agent, true, null),
+          token: generated.token
+        });
+      } catch (error) {
+        logRouteError("/api/agents/token", error);
         return handleKnownError(error);
       }
     },

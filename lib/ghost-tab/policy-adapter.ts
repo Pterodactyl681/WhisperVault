@@ -22,6 +22,19 @@ const toAmountString = (value: AgentBudgetAmountInput): string => (typeof value 
 
 const minBigInt = (left: bigint, right: bigint): bigint => (left < right ? left : right);
 
+const isMissingGhostTabSchemaError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    message.includes("whispervault_ghost_tab_sessions") ||
+    message.includes("whispervault_ghost_tab_events") ||
+    message.includes("pgrst205") ||
+    message.includes("schema cache") ||
+    message.includes("could not find the table") ||
+    message.includes("does not exist") ||
+    message.includes("undefined_table")
+  );
+};
+
 const calculateDailyCap = (budget: AgentBudget): string => {
   const currentBalance = BigInt(budget.currentBalance);
   const totalBudget = BigInt(budget.totalBudget);
@@ -74,8 +87,18 @@ export class GhostTabPolicyAdapter implements AgentBudgetPolicyAdapter {
 
   async createBudget(input: CreateAgentBudgetInput): Promise<AgentBudget> {
     const budget = await this.basePolicy.createBudget(input);
-    const session = await this.ghostTabService.openFromBudget(budget);
-    return overlayBudget(budget, session);
+
+    try {
+      const session = await this.ghostTabService.openFromBudget(budget);
+      return overlayBudget(budget, session);
+    } catch (error) {
+      if (isMissingGhostTabSchemaError(error)) {
+        console.warn(`Ghost Tab tables are not available. Run latest Supabase migrations. ${error instanceof Error ? error.message : String(error)}`);
+        return budget;
+      }
+
+      throw error;
+    }
   }
 
   async getBudget(agentId: string): Promise<AgentBudget | null> {
@@ -85,16 +108,34 @@ export class GhostTabPolicyAdapter implements AgentBudgetPolicyAdapter {
       return null;
     }
 
-    const session = await this.ghostTabService.ensureSessionForBudget(budget);
-    return overlayBudget(budget, session);
+    try {
+      const session = await this.ghostTabService.ensureSessionForBudget(budget);
+      return overlayBudget(budget, session);
+    } catch (error) {
+      if (isMissingGhostTabSchemaError(error)) {
+        console.warn(`Ghost Tab tables are not available. Run latest Supabase migrations. ${error instanceof Error ? error.message : String(error)}`);
+        return budget;
+      }
+
+      throw error;
+    }
   }
 
   async listBudgets(): Promise<AgentBudget[]> {
     const budgets = await this.basePolicy.listBudgets();
     return Promise.all(
       budgets.map(async (budget) => {
-        const session = await this.ghostTabService.ensureSessionForBudget(budget);
-        return overlayBudget(budget, session);
+        try {
+          const session = await this.ghostTabService.ensureSessionForBudget(budget);
+          return overlayBudget(budget, session);
+        } catch (error) {
+          if (isMissingGhostTabSchemaError(error)) {
+            console.warn(`Ghost Tab tables are not available. Run latest Supabase migrations. ${error instanceof Error ? error.message : String(error)}`);
+            return budget;
+          }
+
+          throw error;
+        }
       })
     );
   }
@@ -107,8 +148,20 @@ export class GhostTabPolicyAdapter implements AgentBudgetPolicyAdapter {
       throw new Error(`Agent budget not found for agent "${agentId}".`);
     }
 
-    const session = await this.ghostTabService.ensureSessionForBudget(budget);
-    const ghostDecision = await this.ghostTabService.evaluateSpend(agentId, amountString);
+    let session: GhostTabSession | null = null;
+    let ghostDecision;
+
+    try {
+      session = await this.ghostTabService.ensureSessionForBudget(budget);
+      ghostDecision = await this.ghostTabService.evaluateSpend(agentId, amountString);
+    } catch (error) {
+      if (isMissingGhostTabSchemaError(error)) {
+        console.warn(`Ghost Tab tables are not available. Run latest Supabase migrations. ${error instanceof Error ? error.message : String(error)}`);
+        return this.basePolicy.canSpend(agentId, amount);
+      }
+
+      throw error;
+    }
 
     if (!ghostDecision.allowed) {
       return buildBlockedDecision(budget, amountString, ghostDecision.reason ?? "Ghost Tab rejected spend.", ghostDecision.session);
@@ -147,11 +200,22 @@ export class GhostTabPolicyAdapter implements AgentBudgetPolicyAdapter {
     }
 
     const receipt = await this.basePolicy.reserveSpend(agentId, amount, reference);
-    const session = await this.ghostTabService.recordSpendApproved(
-      agentId,
-      amountString,
-      typeof reference === "string" ? reference : reference?.reason
-    );
+    let session: GhostTabSession;
+
+    try {
+      session = await this.ghostTabService.recordSpendApproved(
+        agentId,
+        amountString,
+        typeof reference === "string" ? reference : reference?.reason
+      );
+    } catch (error) {
+      if (isMissingGhostTabSchemaError(error)) {
+        console.warn(`Ghost Tab tables are not available. Run latest Supabase migrations. ${error instanceof Error ? error.message : String(error)}`);
+        return receipt;
+      }
+
+      throw error;
+    }
 
     return {
       ...receipt,
