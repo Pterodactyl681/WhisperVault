@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import type {
   ButtonHTMLAttributes,
   CSSProperties,
@@ -12,7 +14,6 @@ import type {
 } from "react";
 import {
   ArrowRight,
-  Bell,
   BookOpenText,
   CheckCircle2,
   CircleDot,
@@ -22,20 +23,20 @@ import {
   Github,
   Home,
   KeyRound,
+  LogOut,
   Loader2,
   Plus,
   ReceiptText,
-  RefreshCw,
   Settings,
   ShieldCheck,
   ShieldX,
   Sparkles,
   Swords,
   Twitter,
+  Wallet,
   UsersRound,
   XCircle
 } from "lucide-react";
-import { ConnectWalletButton } from "@/components/wallet/connect-wallet-button";
 import { AGENT_BUDGET_OWNER_HEADER } from "@/lib/agent-vault/http";
 import { cn } from "@/lib/utils";
 import { useWhisperPayStore } from "@/store/whisperpay-store";
@@ -45,7 +46,7 @@ const GITHUB_URL = "https://github.com/Pterodactyl681/WhisperVault";
 const X_URL = "#";
 const DOCS_URL = "https://github.com/Pterodactyl681/WhisperVault#readme";
 const formControlClass =
-  "h-11 w-full rounded-lg border border-violet-200/12 bg-[#080812] px-3 text-[14px] text-white caret-violet-300 outline-none transition placeholder:text-zinc-600 focus:border-violet-400/55 focus:bg-[#0B0B17] focus:shadow-[0_0_0_3px_rgba(139,92,246,0.14)] disabled:cursor-not-allowed disabled:border-white/[0.06] disabled:bg-[#07070D] disabled:text-zinc-600 [color-scheme:dark]";
+  "h-11 w-full rounded-lg border border-violet-200/12 bg-[#080812] px-3 text-[16px] text-white caret-violet-300 outline-none transition placeholder:text-zinc-600 focus:border-violet-400/55 focus:bg-[#0B0B17] focus:shadow-[0_0_0_3px_rgba(139,92,246,0.14)] disabled:cursor-not-allowed disabled:border-white/[0.06] disabled:bg-[#07070D] disabled:text-zinc-600 [color-scheme:dark]";
 
 interface CommandCenterAgent {
   id: string;
@@ -294,6 +295,8 @@ const percentOf = (current?: string | null, max?: string | null): number => {
 
 export default function CommandCenterPageClient() {
   const wallet = useWhisperPayStore((state) => state.wallet);
+  const solanaWallet = useWallet();
+  const { setVisible: setWalletModalVisible } = useWalletModal();
   const controllerWallet = wallet.connected && wallet.address ? wallet.address : DEMO_CONTROLLER;
   const [activeSection, setActiveSection] = useState<SectionId>("overview");
   const [agents, setAgents] = useState<CommandCenterAgent[]>([]);
@@ -538,6 +541,16 @@ export default function CommandCenterPageClient() {
     }
   };
 
+  const handleWalletAction = async () => {
+    if (solanaWallet.connected) {
+      await solanaWallet.disconnect();
+      return;
+    }
+
+    solanaWallet.select(null);
+    setWalletModalVisible(true);
+  };
+
   return (
     <div className="relative left-1/2 -mb-6 -mt-6 min-h-screen w-screen -translate-x-1/2 bg-[#03030A] text-white md:-mb-8 md:-mt-8">
       <div className="fixed inset-0 bg-[radial-gradient(circle_at_48%_18%,rgba(130,63,255,0.20),transparent_28%),radial-gradient(circle_at_82%_8%,rgba(93,45,185,0.16),transparent_22%),linear-gradient(180deg,#03030A_0%,#050510_48%,#020207_100%)]" />
@@ -549,8 +562,8 @@ export default function CommandCenterPageClient() {
             <div className="flex items-center gap-3">
               <Sigil className="h-11 w-11" />
               <div>
-                <div className="text-[15px] font-semibold uppercase tracking-[0.11em] text-white">WhisperVault</div>
-                <div className="text-[11px] text-violet-200/48">Private spend control</div>
+                <div className="text-[17px] font-semibold uppercase tracking-[0.11em] text-white">WhisperVault</div>
+                <div className="text-[13px] text-violet-200/48">Private spend control</div>
               </div>
             </div>
 
@@ -565,7 +578,7 @@ export default function CommandCenterPageClient() {
                     type="button"
                     onClick={() => setActiveSection(item.id)}
                     className={cn(
-                      "group flex min-h-11 shrink-0 items-center gap-3 rounded-lg border px-3 text-left text-[14px] transition",
+                      "group flex min-h-11 shrink-0 items-center gap-3 rounded-lg border px-3 text-left text-[16px] transition",
                       isActive
                         ? "border-violet-400/25 bg-violet-600/18 text-white shadow-[0_0_32px_rgba(126,71,255,0.18)]"
                         : "border-transparent text-violet-100/70 hover:border-violet-400/18 hover:bg-white/[0.035] hover:text-white"
@@ -578,7 +591,7 @@ export default function CommandCenterPageClient() {
               })}
             </nav>
 
-            <div className="mt-auto hidden items-center gap-2 lg:flex">
+            <div className="mt-auto hidden w-full items-center justify-center gap-2 lg:flex">
               <SidebarFooterLink href={GITHUB_URL} label="GitHub">
                 <Github className="h-4 w-4" />
               </SidebarFooterLink>
@@ -595,20 +608,11 @@ export default function CommandCenterPageClient() {
         <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-8 lg:py-8 xl:px-9">
           <header className="mb-7 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <h1 className="text-[28px] font-medium leading-tight tracking-normal text-white">{sectionCopy[activeSection].title}</h1>
-              <p className="mt-1 text-[14px] text-zinc-400">{sectionCopy[activeSection].subtitle}</p>
+              <h1 className="text-[32px] font-medium leading-tight tracking-normal text-white">{sectionCopy[activeSection].title}</h1>
+              <p className="mt-1 text-[16px] text-zinc-400">{sectionCopy[activeSection].subtitle}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {!wallet.connected ? <ConnectWalletButton label="Connect wallet" variant="secondary" /> : null}
-              <IconButton title="Refresh" onClick={() => void loadData()} disabled={isLoading}>
-                <RefreshCw className={cn("h-4 w-4", isLoading ? "animate-spin" : "")} />
-              </IconButton>
-              <IconButton title="Notifications">
-                <Bell className="h-4 w-4" />
-              </IconButton>
-              <IconButton title="Settings" onClick={() => setActiveSection("settings")}>
-                <Settings className="h-4 w-4" />
-              </IconButton>
+              <HeaderWalletButton connected={solanaWallet.connected} connecting={solanaWallet.connecting} onClick={() => void handleWalletAction()} />
             </div>
           </header>
 
@@ -706,7 +710,7 @@ function OverviewSection({
               <div className="min-w-0">
                 <div className="flex items-center gap-3">
                   <span className="h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_14px_rgba(167,111,255,0.85)]" />
-                  <div className="truncate text-[20px] text-white">{activeAgent.name}</div>
+                  <div className="truncate text-[23px] text-white">{activeAgent.name}</div>
                   <StatusBadge status={activeAgent.status} />
                 </div>
               </div>
@@ -784,7 +788,7 @@ function OverviewSection({
           ))}
         </DataTable>
         {recentReceipts.length > 0 ? (
-          <button type="button" onClick={() => setSection("receipts")} className="mx-auto mt-5 flex items-center gap-2 text-[13px] text-violet-300">
+          <button type="button" onClick={() => setSection("receipts")} className="mx-auto mt-5 flex items-center gap-2 text-[15px] text-violet-300">
             View All Receipts <ArrowRight className="h-4 w-4" />
           </button>
         ) : null}
@@ -825,7 +829,7 @@ function AllowanceSection({
           </div>
           <div className="space-y-5">
             <PanelTitle>Allowance Session</PanelTitle>
-            <div className="text-[34px] font-medium leading-tight text-white">
+            <div className="text-[39px] font-medium leading-tight text-white">
               {activeAgent?.ghostAllowanceLive ?? "0"} / {activeAgent?.ghostAllowanceMax ?? "0"} USDC
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -868,12 +872,12 @@ function AllowanceSection({
               <div key={event.id} className="rounded-lg border border-white/[0.08] bg-white/[0.025] p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-[14px] font-medium capitalize text-white">{event.type.replace(/_/g, " ")}</div>
-                    <div className="mt-1 text-[12px] text-zinc-500">{formatDateTime(event.at)}</div>
+                    <div className="text-[16px] font-medium capitalize text-white">{event.type.replace(/_/g, " ")}</div>
+                    <div className="mt-1 text-[14px] text-zinc-500">{formatDateTime(event.at)}</div>
                   </div>
                   {event.amount ? <StatusBadge status="confirmed">{event.amount} USDC</StatusBadge> : null}
                 </div>
-                {event.reason ? <p className="mt-3 text-[13px] text-zinc-400">{event.reason}</p> : null}
+                {event.reason ? <p className="mt-3 text-[15px] text-zinc-400">{event.reason}</p> : null}
               </div>
             ))
           ) : (
@@ -1025,11 +1029,11 @@ function AgentsSection({
               <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr_auto] lg:items-center">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="truncate text-[16px] font-medium text-white">{agent.name}</div>
+                    <div className="truncate text-[18px] font-medium text-white">{agent.name}</div>
                     {agent.isActive ? <StatusBadge status="active">Active</StatusBadge> : null}
                     <StatusBadge status={agent.status} />
                   </div>
-                  <div className="mt-2 text-[12px] text-zinc-500">{formatRail(agent.executionMode)}</div>
+                  <div className="mt-2 text-[14px] text-zinc-500">{formatRail(agent.executionMode)}</div>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                   <SoftMetric label="Ghost Allowance" value={`${agent.ghostAllowanceLive}/${agent.ghostAllowanceMax}`} compact />
@@ -1047,17 +1051,17 @@ function AgentsSection({
               </div>
             </div>
           ))}
-          {agents.length === 0 ? <EmptyState title="No agents" body="Create one to start routing command center spend." /> : null}
+          {agents.length === 0 ? <EmptyState title="No agents" body="Add an agent to start routing spend intents." /> : null}
         </div>
       </Panel>
 
       <Panel>
-        <PanelTitle>Create Agent</PanelTitle>
+        <PanelTitle>Add Agent</PanelTitle>
         <form className="mt-6 space-y-3" onSubmit={createAgent}>
           <StyledInput value={newAgentName} onChange={(event) => setNewAgentName(event.target.value)} placeholder="agent name" aria-label="New agent name" />
           <ControlButton type="submit" disabled={isSubmitting} className="w-full justify-center">
             <Plus className="h-4 w-4" />
-            Create Agent
+            Add Agent
           </ControlButton>
         </form>
       </Panel>
@@ -1152,7 +1156,7 @@ function SimulatorSection({
             <div className="rounded-lg border border-white/[0.08] bg-white/[0.025] p-5">
               <div className="flex items-center gap-3">
                 {spendResult.decision === "blocked" ? <XCircle className="h-5 w-5 text-red-400" /> : <CheckCircle2 className="h-5 w-5 text-emerald-400" />}
-                <div className="text-[18px] font-medium capitalize text-white">{spendResult.decision ?? "approved"}</div>
+                <div className="text-[21px] font-medium capitalize text-white">{spendResult.decision ?? "approved"}</div>
               </div>
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 <SoftMetric label="Reason" value={spendResult.reason ?? "Policy accepted the intent."} />
@@ -1242,7 +1246,7 @@ function SettingsSection({
                   <div className="font-medium text-white">{recipient.label}</div>
                   {recipient.isDefaultForActiveAgent ? <StatusBadge status="active">Default</StatusBadge> : null}
                 </div>
-                <div className="mt-1 break-all text-[12px] text-zinc-500">{recipient.address}</div>
+                <div className="mt-1 break-all text-[14px] text-zinc-500">{recipient.address}</div>
               </div>
               <ControlButton disabled={recipient.isDefaultForActiveAgent || isSubmitting} onClick={() => useRecipient(recipient.label)}>
                 Use Recipient
@@ -1265,14 +1269,14 @@ function Panel({ children, className }: { children: ReactNode; className?: strin
 }
 
 function PanelTitle({ children }: { children: ReactNode }) {
-  return <h2 className="text-[13px] font-medium uppercase tracking-[0.08em] text-violet-300">{children}</h2>;
+  return <h2 className="text-[15px] font-medium uppercase tracking-[0.08em] text-violet-300">{children}</h2>;
 }
 
 function NoticeBanner({ notice }: { notice: NonNullable<Notice> }) {
   return (
     <div
       className={cn(
-        "mb-5 rounded-lg border px-4 py-3 text-[13px]",
+        "mb-5 rounded-lg border px-4 py-3 text-[15px]",
         notice.tone === "success" ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-100" : "",
         notice.tone === "warning" ? "border-amber-300/25 bg-amber-300/10 text-amber-100" : "",
         notice.tone === "error" ? "border-red-400/25 bg-red-400/10 text-red-100" : ""
@@ -1285,7 +1289,7 @@ function NoticeBanner({ notice }: { notice: NonNullable<Notice> }) {
 
 function LoadingStrip() {
   return (
-    <div className="mb-5 flex items-center gap-2 rounded-lg border border-violet-300/15 bg-violet-400/8 px-4 py-3 text-[13px] text-violet-100/75">
+    <div className="mb-5 flex items-center gap-2 rounded-lg border border-violet-300/15 bg-violet-400/8 px-4 py-3 text-[15px] text-violet-100/75">
       <Loader2 className="h-4 w-4 animate-spin text-violet-300" />
       Loading command center data
     </div>
@@ -1349,9 +1353,9 @@ function AllowanceRing({
     >
       <div className="grid h-full w-full place-items-center rounded-full border border-violet-300/18 bg-[radial-gradient(circle_at_50%_35%,rgba(147,74,255,0.20),rgba(4,4,11,0.94)_62%)]">
         <div className="text-center">
-          <div className={cn("font-light leading-none text-white", large ? "text-[52px]" : "text-[34px]")}>{current ?? "0"}</div>
-          <div className={cn("mt-2 text-zinc-300", large ? "text-[20px]" : "text-[16px]")}>/ {max ?? "0"}</div>
-          <div className="mt-3 text-[12px] uppercase tracking-[0.1em] text-zinc-400">USDC</div>
+          <div className={cn("font-light leading-none text-white", large ? "text-[60px]" : "text-[39px]")}>{current ?? "0"}</div>
+          <div className={cn("mt-2 text-zinc-300", large ? "text-[23px]" : "text-[18px]")}>/ {max ?? "0"}</div>
+          <div className="mt-3 text-[14px] uppercase tracking-[0.1em] text-zinc-400">USDC</div>
         </div>
       </div>
     </div>
@@ -1361,8 +1365,8 @@ function AllowanceRing({
 function MetricRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-4 border-b border-white/[0.07] pb-3 last:border-b-0">
-      <span className="text-[13px] text-zinc-400">{label}</span>
-      <span className="text-right text-[13px] font-medium text-white">{value}</span>
+      <span className="text-[15px] text-zinc-400">{label}</span>
+      <span className="text-right text-[15px] font-medium text-white">{value}</span>
     </div>
   );
 }
@@ -1370,8 +1374,8 @@ function MetricRow({ label, value }: { label: string; value: string }) {
 function LabelValue({ label, value, withCopy = false }: { label: string; value: string; withCopy?: boolean }) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-[0.08em] text-zinc-500">{label}</div>
-      <div className="mt-2 flex items-center gap-2 text-[14px] text-white">
+      <div className="text-[13px] uppercase tracking-[0.08em] text-zinc-500">{label}</div>
+      <div className="mt-2 flex items-center gap-2 text-[16px] text-white">
         <span>{value}</span>
         {withCopy ? <Copy className="h-3.5 w-3.5 text-zinc-500" /> : null}
       </div>
@@ -1382,9 +1386,9 @@ function LabelValue({ label, value, withCopy = false }: { label: string; value: 
 function SummaryMetric({ label, value, sublabel }: { label: string; value: string; sublabel?: string }) {
   return (
     <div className="px-3 first:pl-0">
-      <div className="text-[11px] uppercase tracking-[0.08em] text-zinc-500">{label}</div>
-      <div className="mt-2 text-[18px] text-white">{value}</div>
-      {sublabel ? <div className="mt-1 text-[11px] uppercase text-zinc-500">{sublabel}</div> : null}
+      <div className="text-[13px] uppercase tracking-[0.08em] text-zinc-500">{label}</div>
+      <div className="mt-2 text-[21px] text-white">{value}</div>
+      {sublabel ? <div className="mt-1 text-[13px] uppercase text-zinc-500">{sublabel}</div> : null}
     </div>
   );
 }
@@ -1392,8 +1396,8 @@ function SummaryMetric({ label, value, sublabel }: { label: string; value: strin
 function SoftMetric({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
   return (
     <div className={cn("rounded-lg border border-white/[0.08] bg-black/18", compact ? "p-3" : "p-4")}>
-      <div className="text-[11px] uppercase tracking-[0.08em] text-zinc-500">{label}</div>
-      <div className={cn("mt-2 break-words font-medium text-white", compact ? "text-[13px]" : "text-[15px]")}>{value}</div>
+      <div className="text-[13px] uppercase tracking-[0.08em] text-zinc-500">{label}</div>
+      <div className={cn("mt-2 break-words font-medium text-white", compact ? "text-[15px]" : "text-[17px]")}>{value}</div>
     </div>
   );
 }
@@ -1404,7 +1408,7 @@ function StatusBadge({ status, children }: { status?: string | null; children?: 
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.06em]",
+        "inline-flex items-center rounded-full border px-2 py-0.5 text-[12px] font-medium uppercase tracking-[0.06em]",
         tone === "success" ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300" : "",
         tone === "warning" ? "border-amber-300/25 bg-amber-300/10 text-amber-200" : "",
         tone === "danger" ? "border-red-400/25 bg-red-400/10 text-red-300" : "",
@@ -1421,7 +1425,7 @@ function ActionButton({ children, onClick }: { children: ReactNode; onClick?: ()
     <button
       type="button"
       onClick={onClick}
-      className="flex min-h-11 w-full items-center justify-between rounded-lg border border-white/10 bg-black/18 px-3 text-[14px] text-violet-300 transition hover:border-violet-300/30 hover:bg-violet-400/8"
+      className="flex min-h-11 w-full items-center justify-between rounded-lg border border-white/10 bg-black/18 px-3 text-[16px] text-violet-300 transition hover:border-violet-300/30 hover:bg-violet-400/8"
     >
       {children}
       <ArrowRight className="h-4 w-4" />
@@ -1452,7 +1456,7 @@ function ControlButton({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { asAnchor?: boolean; href?: string }) {
   const baseClassName = cn(
-    "inline-flex min-h-10 items-center gap-2 rounded-lg border border-violet-300/18 bg-violet-400/8 px-3 text-[13px] font-medium text-violet-100 transition hover:border-violet-300/35 hover:bg-violet-400/14 focus-visible:border-violet-400/55 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(139,92,246,0.14)] disabled:cursor-not-allowed disabled:border-white/[0.06] disabled:bg-white/[0.03] disabled:text-zinc-500 disabled:opacity-60",
+    "inline-flex min-h-10 items-center gap-2 rounded-lg border border-violet-300/18 bg-violet-400/8 px-3 text-[15px] font-medium text-violet-100 transition hover:border-violet-300/35 hover:bg-violet-400/14 focus-visible:border-violet-400/55 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(139,92,246,0.14)] disabled:cursor-not-allowed disabled:border-white/[0.06] disabled:bg-white/[0.03] disabled:text-zinc-500 disabled:opacity-60",
     className
   );
 
@@ -1471,16 +1475,26 @@ function ControlButton({
   );
 }
 
-function IconButton({ children, title, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { title: string }) {
+function HeaderWalletButton({
+  connected,
+  connecting,
+  onClick
+}: {
+  connected: boolean;
+  connecting: boolean;
+  onClick: () => void;
+}) {
+  const Icon = connected ? LogOut : Wallet;
+
   return (
     <button
       type="button"
-      title={title}
-      aria-label={title}
-      className="grid h-10 w-10 place-items-center rounded-lg border border-white/10 bg-black/22 text-violet-100/80 transition hover:border-violet-300/30 hover:text-white disabled:opacity-50"
-      {...props}
+      onClick={onClick}
+      disabled={connecting}
+      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-violet-300/25 bg-[#132033]/88 px-4 text-[16px] font-medium text-violet-100 shadow-[0_0_0_1px_rgba(139,92,246,0.05),0_12px_32px_rgba(76,29,149,0.22)] transition hover:border-violet-300/45 hover:bg-[#172844] hover:text-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(139,92,246,0.18)] disabled:cursor-not-allowed disabled:opacity-60"
     >
-      {children}
+      {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
+      {connected ? "Disconnect wallet" : connecting ? "Connecting" : "Connect wallet"}
     </button>
   );
 }
@@ -1505,7 +1519,7 @@ function StyledSelect(props: SelectHTMLAttributes<HTMLSelectElement>) {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-[11px] uppercase tracking-[0.08em] text-zinc-500">{label}</span>
+      <span className="mb-2 block text-[13px] uppercase tracking-[0.08em] text-zinc-500">{label}</span>
       {children}
     </label>
   );
@@ -1516,8 +1530,8 @@ function PolicyRule({ title, body, status }: { title: string; body: string; stat
     <div className="rounded-lg border border-white/[0.08] bg-white/[0.025] p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[15px] font-medium text-white">{title}</div>
-          <p className="mt-1 text-[13px] text-zinc-400">{body}</p>
+          <div className="text-[17px] font-medium text-white">{title}</div>
+          <p className="mt-1 text-[15px] text-zinc-400">{body}</p>
         </div>
         <StatusBadge status={status} />
       </div>
@@ -1541,8 +1555,8 @@ function DataTable({
   return (
     <div className="mt-5 overflow-hidden rounded-lg border border-white/[0.06]">
       <div className="overflow-x-auto">
-        <table className="min-w-full text-left text-[13px]">
-          <thead className="bg-white/[0.015] text-[11px] uppercase tracking-[0.06em] text-zinc-500">
+        <table className="min-w-full text-left text-[15px]">
+          <thead className="bg-white/[0.015] text-[13px] uppercase tracking-[0.06em] text-zinc-500">
             <tr>
               {columns.map((column) => (
                 <th key={column} className="whitespace-nowrap px-3 py-3 font-medium">
@@ -1575,7 +1589,7 @@ function EmptyState({ title, body, flat = false }: { title: string; body: string
   return (
     <div className={cn("rounded-lg border border-dashed border-white/[0.10] p-5", flat ? "m-3" : "mt-6")}>
       <div className="font-medium text-white">{title}</div>
-      <div className="mt-1 text-[13px] text-zinc-500">{body}</div>
+      <div className="mt-1 text-[15px] text-zinc-500">{body}</div>
     </div>
   );
 }
