@@ -59,6 +59,13 @@ const CONTROLLER_WALLETS_TABLE = "whispervault_controller_wallets";
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
+const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+const isDuplicateKeyError = (error: unknown): boolean => {
+  const message = errorMessage(error).toLowerCase();
+  return message.includes("23505") || message.includes("409") || message.includes("duplicate key");
+};
+
 const toBudget = (row: AgentBudgetRow): AgentBudget => ({
   agentId: row.agent_id,
   owner: row.owner,
@@ -231,10 +238,16 @@ export class SupabaseAgentBudgetRepository implements AgentBudgetRepository {
       return;
     }
 
-    await this.client.insert(CONTROLLER_WALLETS_TABLE, {
-      address: owner,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    });
+    try {
+      await this.client.insert(CONTROLLER_WALLETS_TABLE, {
+        address: owner,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+    } catch (error) {
+      if (!isDuplicateKeyError(error)) {
+        throw error;
+      }
+    }
   }
 }

@@ -600,7 +600,10 @@ export default function CommandCenterPageClient() {
     setIsLoading(true);
     setNotice(null);
 
-    const readJson = async <T,>(url: string, fallback: T): Promise<{ data: T; error: string | null }> => {
+    const readJson = async <T extends { warnings?: string[] },>(
+      url: string,
+      fallback: T
+    ): Promise<{ data: T; error: string | null }> => {
       try {
         const response = await fetch(url, { headers: ownerHeaders });
 
@@ -615,16 +618,23 @@ export default function CommandCenterPageClient() {
     };
 
     const [agentsResult, recipientsResult, receiptsResult] = await Promise.all([
-      readJson<{ agents?: CommandCenterAgent[] }>("/api/agents", { agents: [] }),
-      readJson<{ recipients?: CommandCenterRecipient[] }>("/api/recipients", { recipients: [] }),
-      readJson<{ receipts?: CommandCenterReceipt[] }>("/api/receipts", { receipts: [] })
+      readJson<{ agents?: CommandCenterAgent[]; warnings?: string[] }>("/api/agents", { agents: [] }),
+      readJson<{ recipients?: CommandCenterRecipient[]; warnings?: string[] }>("/api/recipients", { recipients: [] }),
+      readJson<{ receipts?: CommandCenterReceipt[]; warnings?: string[] }>("/api/receipts", { receipts: [] })
     ]);
 
     setAgents(Array.isArray(agentsResult.data.agents) ? agentsResult.data.agents : []);
     setRecipients(Array.isArray(recipientsResult.data.recipients) ? recipientsResult.data.recipients : []);
     setReceipts(Array.isArray(receiptsResult.data.receipts) ? receiptsResult.data.receipts : []);
 
-    const errors = [agentsResult.error, recipientsResult.error, receiptsResult.error].filter(Boolean);
+    const errors = [
+      agentsResult.error,
+      recipientsResult.error,
+      receiptsResult.error,
+      ...(agentsResult.data.warnings ?? []),
+      ...(recipientsResult.data.warnings ?? []),
+      ...(receiptsResult.data.warnings ?? [])
+    ].filter(Boolean);
 
     if (errors.length > 0) {
       setNotice({

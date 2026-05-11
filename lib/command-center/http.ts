@@ -72,6 +72,13 @@ const isMissingSchemaError = (error: unknown): boolean => {
   );
 };
 
+const isDuplicateKeyError = (error: unknown): boolean => {
+  const message = errorMessage(error).toLowerCase();
+  return message.includes("23505") || message.includes("409") || message.includes("duplicate key");
+};
+
+const uniqueWarnings = (warnings: string[]): string[] => Array.from(new Set(warnings.filter(Boolean)));
+
 const logRouteError = (route: CommandCenterRouteName, error: unknown): void => {
   console.error(`[Command Center] ${route} failed: ${errorMessage(error)}`);
 };
@@ -81,6 +88,7 @@ const logSchemaFallback = (route: CommandCenterRouteName, detail: string, error:
 };
 
 const GHOST_TAB_MIGRATION_WARNING = "Ghost Tab tables are not available. Run latest Supabase migrations.";
+const GHOST_TAB_PARTIAL_WARNING = "Some Ghost Tab runtime rows could not be loaded.";
 
 const normalizeAgentName = (value: string): string =>
   value
@@ -235,6 +243,7 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
     const agents = await options.registryService.listAgents(controllerWallet, ownedBudgets);
     const activeAgent = await options.registryService.getActiveAgent(controllerWallet, ownedBudgets);
     const ghostTabs = new Map<string, GhostTabSnapshot>();
+    const warnings: string[] = [];
 
     if (options.ghostTabService) {
       for (const budget of ownedBudgets) {
@@ -242,11 +251,14 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
           await options.ghostTabService.ensureSessionForBudget(budget);
           ghostTabs.set(budget.agentId, await options.ghostTabService.getSnapshot(budget.agentId));
         } catch (error) {
-          if (!isMissingSchemaError(error)) {
-            throw error;
+          if (isMissingSchemaError(error)) {
+            logSchemaFallback("/api/agents", "Ghost Tab schema is not migrated", error);
+            warnings.push(GHOST_TAB_MIGRATION_WARNING);
+            continue;
           }
 
-          logSchemaFallback("/api/agents", "Ghost Tab schema is not migrated", error);
+          console.warn(`[Command Center] Ghost Tab runtime skipped for ${budget.agentId}: ${errorMessage(error)}`);
+          warnings.push(GHOST_TAB_PARTIAL_WARNING);
         }
       }
     }
@@ -256,7 +268,8 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
       ownedBudgets,
       agents,
       activeAgent,
-      ghostTabs
+      ghostTabs,
+      warnings: uniqueWarnings(warnings)
     };
   };
 
@@ -274,7 +287,8 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
         ownedBudgets: [] as AgentBudget[],
         agents: [] as RegisteredAgent[],
         activeAgent: null,
-        ghostTabs: new Map<string, GhostTabSnapshot>()
+        ghostTabs: new Map<string, GhostTabSnapshot>(),
+        warnings: [GHOST_TAB_MIGRATION_WARNING]
       };
     }
   };
@@ -304,14 +318,18 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
         ghostTab: await options.ghostTabService.getSnapshot(agentId)
       };
     } catch (error) {
-      if (!isMissingSchemaError(error)) {
-        throw error;
+      if (isMissingSchemaError(error)) {
+        logSchemaFallback(route, "Ghost Tab schema is not migrated", error);
+        return {
+          ghostTab: null,
+          warning: GHOST_TAB_MIGRATION_WARNING
+        };
       }
 
-      logSchemaFallback(route, "Ghost Tab schema is not migrated", error);
+      console.warn(`[Command Center] ${route} could not load Ghost Tab snapshot for ${agentId}: ${errorMessage(error)}`);
       return {
         ghostTab: null,
-        warning: GHOST_TAB_MIGRATION_WARNING
+        warning: GHOST_TAB_PARTIAL_WARNING
       };
     }
   };
@@ -320,13 +338,14 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
     listAgents: async (request) => {
       try {
         const controllerWallet = readControllerWallet(request, undefined, demoControllerWallet);
-        const { agents, activeAgent, ghostTabs } = await loadAgentStateForRead("/api/agents", controllerWallet);
+        const { agents, activeAgent, ghostTabs, warnings } = await loadAgentStateForRead("/api/agents", controllerWallet);
         logReadyOnce("agent-registry", "agent registry ready");
 
         return json({
           controllerWallet,
           activeAgentId: activeAgent?.id ?? null,
-          agents: agents.map((agent) => serializeAgent(agent, agent.id === activeAgent?.id, ghostTabs.get(agent.id)))
+          agents: agents.map((agent) => serializeAgent(agent, agent.id === activeAgent?.id, ghostTabs.get(agent.id))),
+          warnings
         });
       } catch (error) {
         logRouteError("/api/agents", error);
@@ -372,29 +391,45 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
             source: "web-command-center"
           }
         };
-        const budget = await options.budgetPolicy.createBudget(budgetInput);
-        const agent = await options.registryService.createAgent({
-          id: budget.agentId,
-          name,
-          controllerWallet,
-          budget,
-          executionMode: "mirage-private-first"
-        });
+        let budget = await options.budgetPolicy.getBudget(name);
+        let alreadyExisted = Boolean(budget);
+
+        if (!budget) {
+          try {
+            budget = await options.budgetPolicy.createBudget(budgetInput);
+          } catch (error) {
+            if (!isDuplicateKeyError(error)) {
+              throw error;
+            }
+
+            const recovered = await options.budgetPolicy.getBudget(name);
+
+            if (!recovered) {
+              throw error;
+            }
+
+            budget = recovered;
+            alreadyExisted = true;
+          }
+        }
+
+        const agent = await options.registryService.upsertFromBudget(budget, name, "mirage-private-first");
 
         await options.registryService.setActiveAgent(controllerWallet, agent.id);
         const ghostSnapshot = await getGhostSnapshotForAgent("/api/agents/create", agent.id);
+        const message = alreadyExisted ? "Agent Vault already exists and is now active" : "Agent Vault ready";
 
         return json(
           {
             controllerWallet,
             activeAgentId: agent.id,
             status: "ready",
-            message: "Agent Vault ready",
+            message,
             nextAction: "Connect your agent next",
             agent: serializeAgent(agent, true, ghostSnapshot.ghostTab),
             ...(ghostSnapshot.warning ? { warning: ghostSnapshot.warning } : {})
           },
-          201
+          alreadyExisted ? 200 : 201
         );
       } catch (error) {
         logRouteError("/api/agents/create", error);
@@ -531,9 +566,10 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
     listReceipts: async (request) => {
       try {
         const controllerWallet = readControllerWallet(request, undefined, demoControllerWallet);
-        const { agents } = await loadAgentStateForRead("/api/receipts", controllerWallet);
+        const { agents, warnings } = await loadAgentStateForRead("/api/receipts", controllerWallet);
         const ownedAgentIds = new Set(agents.map((agent) => agent.id));
         let paymentIntents: ServerPaymentIntent[] = [];
+        const receiptWarnings = [...warnings];
 
         try {
           paymentIntents = await options.paylinkService.listPaymentIntents();
@@ -543,18 +579,36 @@ export const createCommandCenterHttpHandlers = (options: CommandCenterHttpOption
           }
 
           logSchemaFallback("/api/receipts", "receipt/payment intent table is not migrated", error);
+          receiptWarnings.push("Receipt tables are not available. Run latest Supabase migrations.");
         }
 
         const receipts = paymentIntents
-          .filter((paymentIntent) => receiptBelongsToController(paymentIntent, controllerWallet, ownedAgentIds))
+          .filter((paymentIntent) => {
+            try {
+              return receiptBelongsToController(paymentIntent, controllerWallet, ownedAgentIds);
+            } catch (error) {
+              console.warn(`[Command Center] skipped partial receipt row: ${errorMessage(error)}`);
+              receiptWarnings.push("Some receipt rows could not be loaded.");
+              return false;
+            }
+          })
           .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
-          .map(serializeReceipt);
+          .flatMap((paymentIntent) => {
+            try {
+              return [serializeReceipt(paymentIntent)];
+            } catch (error) {
+              console.warn(`[Command Center] skipped partial receipt row: ${errorMessage(error)}`);
+              receiptWarnings.push("Some receipt rows could not be loaded.");
+              return [];
+            }
+          });
 
         logReadyOnce("receipts", "receipts ready");
 
         return json({
           controllerWallet,
-          receipts
+          receipts,
+          warnings: uniqueWarnings(receiptWarnings)
         });
       } catch (error) {
         logRouteError("/api/receipts", error);

@@ -47,6 +47,13 @@ const AGENTS_TABLE = "whispervault_agents";
 const ACTIVE_AGENTS_TABLE = "whispervault_active_agents";
 const RECIPIENTS_TABLE = "whispervault_agent_recipients";
 
+const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+const isDuplicateKeyError = (error: unknown): boolean => {
+  const message = errorMessage(error).toLowerCase();
+  return message.includes("23505") || message.includes("409") || message.includes("duplicate key");
+};
+
 const toAgent = (row: AgentRow): RegisteredAgent => ({
   id: row.id,
   name: row.name,
@@ -114,7 +121,16 @@ export class SupabaseAgentRegistryRepository implements AgentRegistryRepository 
   }
 
   async createAgent(agent: RegisteredAgent): Promise<RegisteredAgent> {
-    await this.client.insert<AgentRow>(AGENTS_TABLE, toAgentRow(agent));
+    try {
+      await this.client.insert<AgentRow>(AGENTS_TABLE, toAgentRow(agent));
+    } catch (error) {
+      if (!isDuplicateKeyError(error)) {
+        throw error;
+      }
+
+      return this.getOrThrow(agent.id);
+    }
+
     return this.getOrThrow(agent.id);
   }
 
@@ -122,7 +138,13 @@ export class SupabaseAgentRegistryRepository implements AgentRegistryRepository 
     const updated = await this.client.update<AgentRow>(AGENTS_TABLE, { id: agent.id }, toAgentRow(agent));
 
     if (updated.length === 0) {
-      await this.client.insert<AgentRow>(AGENTS_TABLE, toAgentRow(agent));
+      try {
+        await this.client.insert<AgentRow>(AGENTS_TABLE, toAgentRow(agent));
+      } catch (error) {
+        if (!isDuplicateKeyError(error)) {
+          throw error;
+        }
+      }
     }
 
     return this.getOrThrow(agent.id);
@@ -166,7 +188,15 @@ export class SupabaseAgentRegistryRepository implements AgentRegistryRepository 
     );
 
     if (updated.length === 0) {
-      await this.client.insert<ActiveAgentRow>(ACTIVE_AGENTS_TABLE, row);
+      try {
+        await this.client.insert<ActiveAgentRow>(ACTIVE_AGENTS_TABLE, row);
+      } catch (error) {
+        if (!isDuplicateKeyError(error)) {
+          throw error;
+        }
+
+        await this.client.update<ActiveAgentRow>(ACTIVE_AGENTS_TABLE, { controller_wallet: context.controllerWallet }, row);
+      }
     }
 
     return context;
@@ -187,7 +217,13 @@ export class SupabaseAgentRegistryRepository implements AgentRegistryRepository 
     );
 
     if (updated.length === 0) {
-      await this.client.insert<RecipientRow>(RECIPIENTS_TABLE, row);
+      try {
+        await this.client.insert<RecipientRow>(RECIPIENTS_TABLE, row);
+      } catch (error) {
+        if (!isDuplicateKeyError(error)) {
+          throw error;
+        }
+      }
     }
 
     return recipient;

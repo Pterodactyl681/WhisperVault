@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { AgentBudgetService, DEFAULT_DEMO_AGENT_RECIPIENT, type AgentBudgetPolicyAdapter } from "../lib/agent-budget";
+import { AgentBudgetService, DEFAULT_DEMO_AGENT_RECIPIENT, type AgentBudget, type AgentBudgetPolicyAdapter } from "../lib/agent-budget";
 import { OffchainAgentBudgetPolicyAdapter } from "../lib/agent-budget/policy-adapter";
 import { AGENT_BUDGET_OWNER_HEADER } from "../lib/agent-vault/http";
 import { createCommandCenterHttpHandlers } from "../lib/command-center/http";
@@ -99,6 +99,71 @@ test("agents API generates BYO agent token for active vault", async () => {
   assert.match(body.token, /^wva_/);
 });
 
+test("agent creation is idempotent for an existing Agent Vault", async () => {
+  const harness = await createHarness();
+  await createAgent(harness, "coffee-agent");
+
+  const response = await harness.handlers.createAgent(new Request("http://localhost/api/agents/create", withOwner({ name: "coffee-agent" })));
+  const body = await readJson<{ activeAgentId: string; agent: { id: string; isActive: boolean }; message: string }>(response);
+  const listResponse = await harness.handlers.listAgents(new Request("http://localhost/api/agents", withOwner()));
+  const listBody = await readJson<{ activeAgentId: string; agents: Array<{ id: string; isActive: boolean }> }>(listResponse);
+
+  assert.equal(response.status, 200);
+  assert.equal(body.message, "Agent Vault already exists and is now active");
+  assert.equal(body.activeAgentId, "coffee-agent");
+  assert.equal(body.agent.id, "coffee-agent");
+  assert.equal(body.agent.isActive, true);
+  assert.equal(listBody.activeAgentId, "coffee-agent");
+  assert.equal(listBody.agents.length, 1);
+  assert.equal(listBody.agents[0]?.isActive, true);
+});
+
+test("agent creation recovers when Supabase reports a duplicate budget key", async () => {
+  const harness = await createHarness();
+  await harness.budgetService.createAgentBudget({
+    agentId: "coffee-agent",
+    owner: VALID_CONTROLLER,
+    agentWallet: "agent:coffee-agent",
+    mint: "USDC",
+    totalBudget: "100",
+    currentBalance: "100",
+    dailyCapPercent: 30,
+    rail: "magicblock-private",
+    allowPublicFallback: false,
+    liveAllowance: "20",
+    maxLiveAllowance: "20",
+    refillAmount: "5",
+    refillIntervalMinutes: 10
+  });
+
+  class DuplicateOnCreatePolicy extends OffchainAgentBudgetPolicyAdapter {
+    private getBudgetCalls = 0;
+
+    override async getBudget(agentId: string): Promise<AgentBudget | null> {
+      this.getBudgetCalls += 1;
+      return this.getBudgetCalls === 1 ? null : super.getBudget(agentId);
+    }
+
+    override async createBudget(): Promise<AgentBudget> {
+      throw new Error('Supabase POST whispervault_agent_budgets failed with 409 Conflict: {"code":"23505","message":"duplicate key value violates unique constraint"}');
+    }
+  }
+
+  const handlers = createCommandCenterHttpHandlers({
+    registryService: harness.agentRegistry,
+    budgetPolicy: new DuplicateOnCreatePolicy({ service: harness.budgetService }),
+    paylinkService: harness.paylinkService
+  });
+  const response = await handlers.createAgent(new Request("http://localhost/api/agents/create", withOwner({ name: "coffee-agent" })));
+  const body = await readJson<{ activeAgentId: string; agent: { id: string; isActive: boolean }; message: string }>(response);
+
+  assert.equal(response.status, 200);
+  assert.equal(body.message, "Agent Vault already exists and is now active");
+  assert.equal(body.activeAgentId, "coffee-agent");
+  assert.equal(body.agent.id, "coffee-agent");
+  assert.equal(body.agent.isActive, true);
+});
+
 test("agent creation survives missing Ghost Tab tables with migration warning", async () => {
   const harness = await createHarness();
   const schemaError = new Error(
@@ -124,6 +189,31 @@ test("agent creation survives missing Ghost Tab tables with migration warning", 
   assert.equal(body.message, "Agent Vault ready");
   assert.equal(body.nextAction, "Connect your agent next");
   assert.equal(body.warning, "Ghost Tab tables are not available. Run latest Supabase migrations.");
+});
+
+test("agents API returns usable state when Ghost Tab runtime rows are partial", async () => {
+  const harness = await createHarness();
+  await createAgent(harness, "coffee-agent");
+  const handlers = createCommandCenterHttpHandlers({
+    registryService: harness.agentRegistry,
+    budgetPolicy: harness.budgetPolicy,
+    paylinkService: harness.paylinkService,
+    ghostTabService: {
+      ensureSessionForBudget: async () => {
+        throw new Error("duplicate or partial Ghost Tab session state");
+      },
+      getSnapshot: async () => {
+        throw new Error("duplicate or partial Ghost Tab session state");
+      }
+    } as unknown as Parameters<typeof createCommandCenterHttpHandlers>[0]["ghostTabService"]
+  });
+
+  const response = await handlers.listAgents(new Request("http://localhost/api/agents", withOwner()));
+  const body = await readJson<{ agents: Array<{ id: string }>; warnings: string[] }>(response);
+
+  assert.equal(response.status, 200);
+  assert.equal(body.agents[0]?.id, "coffee-agent");
+  assert.deepEqual(body.warnings, ["Some Ghost Tab runtime rows could not be loaded."]);
 });
 
 test("recipients API adds and selects default recipient for the active agent", async () => {

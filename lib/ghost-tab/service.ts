@@ -4,8 +4,10 @@ import type {
   GhostTabCrankIntent,
   GhostTabEvent,
   GhostTabEventType,
+  GhostSessionRuntime,
   GhostTabSession,
   GhostTabSnapshot,
+  GhostTimelineItem,
   GhostTabSpendDecision,
   OpenGhostTabInput
 } from "./types";
@@ -32,6 +34,13 @@ const DEFAULT_SESSION_DURATION_MINUTES = 8 * 60;
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 const defaultCreateId = (prefix: string): string => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+const isDuplicateKeyError = (error: unknown): boolean => {
+  const message = errorMessage(error).toLowerCase();
+  return message.includes("23505") || message.includes("409") || message.includes("duplicate key") || message.includes("already exists");
+};
 
 const assertNonEmptyString = (value: string, fieldName: string): string => {
   const normalized = value.trim();
@@ -74,6 +83,155 @@ const normalizeIso = (value: string | null | undefined, fieldName: string): stri
 };
 
 const minBigInt = (left: bigint, right: bigint): bigint => (left < right ? left : right);
+
+const nextRefillAtForSession = (session: GhostTabSession): string | null =>
+  session.status === "active"
+    ? new Date(Date.parse(session.lastRefillAt) + session.refillIntervalMinutes * 60 * 1000).toISOString()
+    : null;
+
+const calculateSessionLifetimeMinutes = (session: GhostTabSession): number | null => {
+  if (!session.expiresAt) {
+    return null;
+  }
+
+  const lifetimeMs = Date.parse(session.expiresAt) - Date.parse(session.openedAt);
+  return Number.isFinite(lifetimeMs) && lifetimeMs > 0 ? Math.round(lifetimeMs / 60000) : null;
+};
+
+const buildRuntime = (
+  session: GhostTabSession | null,
+  events: GhostTabEvent[]
+): GhostSessionRuntime => {
+  if (!session) {
+    return {
+      sessionStatus: "idle",
+      refillEngine: "offchain-lazy",
+      nextRefillAt: null,
+      refillTickCount: 0,
+      queuedRefill: "0",
+      clawbackPending: false,
+      clawbackCompleted: false,
+      tickCadenceMinutes: null,
+      sessionLifetimeMinutes: null
+    };
+  }
+
+  const nextRefillAt = nextRefillAtForSession(session);
+  const clawbackCompleted = session.clawbackExecuted || session.status === "clawed_back";
+  const clawbackPending = session.clawbackEnabled && !clawbackCompleted && session.status === "expired";
+  const sessionStatus =
+    session.status === "clawed_back"
+      ? "closed"
+      : clawbackPending
+        ? "closing"
+        : session.status === "expired"
+          ? "closed"
+          : session.status;
+  const allowanceLive = BigInt(session.allowanceLive);
+  const allowanceMax = BigInt(session.allowanceMax);
+  const queuedRefill =
+    session.status === "active" && allowanceLive < allowanceMax
+      ? minBigInt(BigInt(session.refillAmount), allowanceMax - allowanceLive).toString()
+      : "0";
+
+  return {
+    sessionStatus,
+    refillEngine: session.status === "active" ? "er-scheduled" : "offchain-lazy",
+    nextRefillAt,
+    refillTickCount: events.filter((event) => event.type === "refill_tick").length,
+    queuedRefill,
+    clawbackPending,
+    clawbackCompleted,
+    tickCadenceMinutes: session.refillIntervalMinutes,
+    sessionLifetimeMinutes: calculateSessionLifetimeMinutes(session)
+  };
+};
+
+const timelineItem = (
+  session: GhostTabSession,
+  event: GhostTabEvent,
+  type: GhostTimelineItem["type"],
+  label: string,
+  synthetic = false
+): GhostTimelineItem => ({
+  id: `${event.id}:${type}`,
+  type,
+  label,
+  at: event.at,
+  ...(event.amount ? { amount: event.amount } : {}),
+  ...(event.allowanceBefore ? { allowanceBefore: event.allowanceBefore } : {}),
+  ...(event.allowanceAfter ? { allowanceAfter: event.allowanceAfter } : {}),
+  ...(event.reason ? { reason: event.reason } : {}),
+  ...(synthetic ? { synthetic } : {}),
+  ...(!event.amount && type === "clawback_completed" && session.totalClawedBack !== "0"
+    ? { amount: session.totalClawedBack }
+    : {})
+});
+
+const buildTimeline = (
+  session: GhostTabSession | null,
+  events: GhostTabEvent[],
+  runtime: GhostSessionRuntime
+): GhostTimelineItem[] => {
+  if (!session) {
+    return [];
+  }
+
+  const items: GhostTimelineItem[] = [];
+
+  for (const event of events) {
+    if (event.type === "opened") {
+      items.push(timelineItem(session, event, "session_opened", "Session opened"));
+    } else if (event.type === "refill_tick") {
+      items.push(timelineItem(session, event, "refill_tick_executed", "Refill tick executed"));
+    } else if (event.type === "spend_approved") {
+      items.push(timelineItem(session, event, "spend_reserved", "Spend reserved"));
+    } else if (event.type === "paused") {
+      items.push(timelineItem(session, event, "session_paused", "Session paused"));
+    } else if (event.type === "clawback") {
+      if (!items.some((item) => item.type === "clawback_queued")) {
+        items.push(timelineItem(session, event, "clawback_queued", "Clawback queued", true));
+      }
+      items.push(timelineItem(session, event, "clawback_completed", "Clawback completed"));
+    } else if (event.type === "expired" && session.clawbackEnabled) {
+      items.push(timelineItem(session, event, "clawback_queued", "Clawback queued"));
+    }
+  }
+
+  if (runtime.nextRefillAt) {
+    items.push({
+      id: `${session.id}:refill_tick_scheduled:${runtime.nextRefillAt}`,
+      type: "refill_tick_scheduled",
+      label: "Refill tick scheduled",
+      at: runtime.nextRefillAt,
+      amount: runtime.queuedRefill,
+      synthetic: true
+    });
+  }
+
+  if (items.length === 0) {
+    items.push({
+      id: `${session.id}:session_opened:synthetic`,
+      type: "session_opened",
+      label: "Session opened",
+      at: session.openedAt,
+      synthetic: true
+    });
+  }
+
+  if (runtime.clawbackPending && !items.some((item) => item.type === "clawback_queued")) {
+    items.push({
+      id: `${session.id}:clawback_queued:synthetic`,
+      type: "clawback_queued",
+      label: "Clawback queued",
+      at: session.expiresAt ?? session.openedAt,
+      amount: session.allowanceLive,
+      synthetic: true
+    });
+  }
+
+  return items.sort((left, right) => Date.parse(left.at) - Date.parse(right.at));
+};
 
 export class GhostTabService {
   private readonly repository: GhostTabRepository;
@@ -147,7 +305,29 @@ export class GhostTabService {
     const latest = await this.repository.getLatestSession(budget.agentId);
 
     if (!latest || latest.status === "clawed_back") {
-      return this.openFromBudget(budget);
+      try {
+        return await this.openFromBudget(budget);
+      } catch (error) {
+        if (!isDuplicateKeyError(error)) {
+          throw error;
+        }
+
+        const recovered = await this.repository.getLatestSession(budget.agentId);
+
+        if (!recovered) {
+          throw error;
+        }
+
+        return this.syncSession({
+          ...recovered,
+          controllerWallet: budget.owner,
+          allowanceMax: budget.maxLiveAllowance,
+          refillAmount: budget.refillAmount,
+          refillIntervalMinutes: budget.refillIntervalMinutes,
+          clawbackEnabled: budget.clawbackOnSessionEnd,
+          preferredRail: budget.rail
+        });
+      }
     }
 
     return this.syncSession({
@@ -170,15 +350,22 @@ export class GhostTabService {
     const session = await this.getSession(agentId);
 
     if (!session) {
+      const runtime = buildRuntime(null, []);
       return {
         session: null,
-        events: []
+        events: [],
+        runtime,
+        timeline: []
       };
     }
+    const events = await this.repository.listEvents(session.id);
+    const runtime = buildRuntime(session, events);
 
     return {
       session,
-      events: await this.repository.listEvents(session.id)
+      events,
+      runtime,
+      timeline: buildTimeline(session, events, runtime)
     };
   }
 
@@ -197,6 +384,15 @@ export class GhostTabService {
         session,
         events: await this.repository.listEvents(session.id)
       }))
+    ).then((snapshots) =>
+      snapshots.map((snapshot) => {
+        const runtime = buildRuntime(snapshot.session, snapshot.events);
+        return {
+          ...snapshot,
+          runtime,
+          timeline: buildTimeline(snapshot.session, snapshot.events, runtime)
+        };
+      })
     );
   }
 

@@ -56,6 +56,13 @@ const CONTROLLER_WALLETS_TABLE = "whispervault_controller_wallets";
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
+const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+const isDuplicateKeyError = (error: unknown): boolean => {
+  const message = errorMessage(error).toLowerCase();
+  return message.includes("23505") || message.includes("409") || message.includes("duplicate key");
+};
+
 const toSession = (row: GhostTabSessionRow): GhostTabSession => ({
   id: row.id,
   agentId: row.agent_id,
@@ -142,7 +149,16 @@ export class SupabaseGhostTabRepository implements GhostTabRepository {
 
   async createSession(session: GhostTabSession): Promise<GhostTabSession> {
     await this.ensureControllerWallet(session.controllerWallet);
-    await this.client.insert<GhostTabSessionRow>(SESSIONS_TABLE, toSessionRow(session));
+    try {
+      await this.client.insert<GhostTabSessionRow>(SESSIONS_TABLE, toSessionRow(session));
+    } catch (error) {
+      if (!isDuplicateKeyError(error)) {
+        throw error;
+      }
+
+      return (await this.getSession(session.id)) ?? (await this.getLatestSession(session.agentId)) ?? session;
+    }
+
     return this.getSessionOrThrow(session.id);
   }
 
@@ -151,7 +167,16 @@ export class SupabaseGhostTabRepository implements GhostTabRepository {
     const updated = await this.client.update<GhostTabSessionRow>(SESSIONS_TABLE, { id: session.id }, toSessionRow(session));
 
     if (updated.length === 0) {
-      await this.client.insert<GhostTabSessionRow>(SESSIONS_TABLE, toSessionRow(session));
+      try {
+        await this.client.insert<GhostTabSessionRow>(SESSIONS_TABLE, toSessionRow(session));
+      } catch (error) {
+        if (!isDuplicateKeyError(error)) {
+          throw error;
+        }
+
+        const existing = (await this.getSession(session.id)) ?? (await this.getLatestSession(session.agentId));
+        return existing ?? session;
+      }
     }
 
     return this.getSessionOrThrow(session.id);
@@ -181,7 +206,14 @@ export class SupabaseGhostTabRepository implements GhostTabRepository {
   }
 
   async appendEvent(event: GhostTabEvent): Promise<GhostTabEvent> {
-    await this.client.insert<GhostTabEventRow>(EVENTS_TABLE, toEventRow(event));
+    try {
+      await this.client.insert<GhostTabEventRow>(EVENTS_TABLE, toEventRow(event));
+    } catch (error) {
+      if (!isDuplicateKeyError(error)) {
+        throw error;
+      }
+    }
+
     return event;
   }
 
@@ -212,10 +244,16 @@ export class SupabaseGhostTabRepository implements GhostTabRepository {
       return;
     }
 
-    await this.client.insert(CONTROLLER_WALLETS_TABLE, {
-      address: owner,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    });
+    try {
+      await this.client.insert(CONTROLLER_WALLETS_TABLE, {
+        address: owner,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+    } catch (error) {
+      if (!isDuplicateKeyError(error)) {
+        throw error;
+      }
+    }
   }
 }
