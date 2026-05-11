@@ -35,7 +35,8 @@ import {
   Twitter,
   Wallet,
   UsersRound,
-  XCircle
+  XCircle,
+  Zap
 } from "lucide-react";
 import { AGENT_BUDGET_OWNER_HEADER } from "@/lib/agent-vault/http";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,7 @@ const DEMO_CONTROLLER = "demo-agent-owner";
 const GITHUB_URL = "https://github.com/Pterodactyl681/WhisperVault";
 const X_URL = "#";
 const DOCS_URL = "https://github.com/Pterodactyl681/WhisperVault#readme";
+const TELEGRAM_REFERENCE_BOT_URL = process.env.NEXT_PUBLIC_TELEGRAM_BOT_URL?.trim() ?? "";
 const formControlClass =
   "h-11 w-full rounded-lg border border-violet-200/12 bg-[#080812] px-3 text-[16px] text-white caret-violet-300 outline-none transition placeholder:text-zinc-600 focus:border-violet-400/55 focus:bg-[#0B0B17] focus:shadow-[0_0_0_3px_rgba(139,92,246,0.14)] disabled:cursor-not-allowed disabled:border-white/[0.06] disabled:bg-[#07070D] disabled:text-zinc-600 [color-scheme:dark]";
 
@@ -143,6 +145,17 @@ type SpendResult =
     }
   | null;
 
+type SimulatorResult =
+  | {
+      decision: "approved" | "blocked";
+      reason: string;
+      amount: string;
+      mint: string;
+      recipient: string;
+      agent: string;
+    }
+  | null;
+
 const navItems: { id: SectionId; label: string; icon: typeof Home }[] = [
   { id: "overview", label: "Overview", icon: Home },
   { id: "allowance", label: "Ghost Allowance", icon: Sparkles },
@@ -181,7 +194,7 @@ const sectionCopy: Record<SectionId, { title: string; subtitle: string }> = {
   },
   simulator: {
     title: "Simulator",
-    subtitle: "Probe the spend firewall with a controlled rogue intent."
+    subtitle: "Dry-run unsafe agent behavior without creating transactions."
   },
   settings: {
     title: "Settings",
@@ -309,10 +322,15 @@ export default function CommandCenterPageClient() {
   const [recipientLabel, setRecipientLabel] = useState("");
   const [recipientAddress, setRecipientAddress] = useState("");
   const [spendAmount, setSpendAmount] = useState("");
-  const [spendMint, setSpendMint] = useState("");
+  const [spendMint, setSpendMint] = useState("USDC");
   const [spendGoal, setSpendGoal] = useState("");
   const [spendRecipient, setSpendRecipient] = useState("");
   const [spendResult, setSpendResult] = useState<SpendResult>(null);
+  const [simulatorAmount, setSimulatorAmount] = useState("");
+  const [simulatorMint, setSimulatorMint] = useState("");
+  const [simulatorGoal, setSimulatorGoal] = useState("");
+  const [simulatorRecipient, setSimulatorRecipient] = useState("");
+  const [simulatorResult, setSimulatorResult] = useState<SimulatorResult>(null);
 
   const activeAgent = useMemo(() => agents.find((agent) => agent.isActive) ?? agents[0] ?? null, [agents]);
   const confirmedReceipts = useMemo(() => receipts.filter((receipt) => receipt.status === "confirmed"), [receipts]);
@@ -473,7 +491,7 @@ export default function CommandCenterPageClient() {
     try {
       const payload = await submitJson("/api/spend-intent", {
         amount: spendAmount,
-        mint: spendMint,
+        mint: spendMint || "USDC",
         goal: spendGoal,
         recipient: spendRecipient
       });
@@ -483,7 +501,7 @@ export default function CommandCenterPageClient() {
       if (payload?.decision === "blocked") {
         setNotice({ tone: "warning", message: payload.reason ?? "Spend Firewall blocked this intent." });
       } else {
-        setNotice({ tone: "success", message: `Spend intent approved: ${payload?.paylinkId ?? "pending"}` });
+        setNotice({ tone: "success", message: `Spend intent created: ${payload?.paylinkId ?? "pending execution"}` });
       }
 
       await loadData();
@@ -492,6 +510,56 @@ export default function CommandCenterPageClient() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const runSimulator = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const amountValue = numericValue(simulatorAmount);
+    const mint = simulatorMint.trim() || "USDC";
+    const recipient = simulatorRecipient || activeAgent?.defaultRecipientAddress || "";
+    const activeAllowance = numericValue(activeAgent?.ghostAllowanceLive);
+    const dailyLeft = numericValue(activeAgent?.dailyLeft);
+
+    if (!activeAgent) {
+      setSimulatorResult({
+        decision: "blocked",
+        reason: "No active agent is selected.",
+        amount: simulatorAmount || "0",
+        mint,
+        recipient,
+        agent: "No active agent"
+      });
+      return;
+    }
+
+    if (amountValue <= 0) {
+      setSimulatorResult({
+        decision: "blocked",
+        reason: "Enter an amount greater than zero.",
+        amount: simulatorAmount || "0",
+        mint,
+        recipient,
+        agent: activeAgent.name
+      });
+      return;
+    }
+
+    const blockedReason =
+      amountValue > activeAllowance
+        ? "Amount exceeds live Ghost Allowance."
+        : amountValue > dailyLeft
+          ? "Amount exceeds daily remaining firewall budget."
+          : "";
+
+    setSimulatorResult({
+      decision: blockedReason ? "blocked" : "approved",
+      reason: blockedReason || "Current visible policy would allow this intent.",
+      amount: simulatorAmount,
+      mint,
+      recipient,
+      agent: activeAgent.name
+    });
   };
 
   const resetDemoState = async () => {
@@ -635,7 +703,24 @@ export default function CommandCenterPageClient() {
             {activeSection === "firewall" ? (
               <FirewallSection activeAgent={activeAgent} recipients={recipients} blockedAttempts={blockedAttempts} setSection={setActiveSection} />
             ) : null}
-            {activeSection === "executions" ? <ExecutionsSection receipts={receipts} /> : null}
+            {activeSection === "executions" ? (
+              <ExecutionsSection
+                activeAgent={activeAgent}
+                recipients={recipients}
+                receipts={receipts}
+                spendAmount={spendAmount}
+                setSpendAmount={setSpendAmount}
+                spendMint={spendMint}
+                setSpendMint={setSpendMint}
+                spendGoal={spendGoal}
+                setSpendGoal={setSpendGoal}
+                spendRecipient={spendRecipient}
+                setSpendRecipient={setSpendRecipient}
+                spendResult={spendResult}
+                submitSpendIntent={submitSpendIntent}
+                isSubmitting={isSubmitting}
+              />
+            ) : null}
             {activeSection === "receipts" ? <ReceiptsSection receipts={confirmedReceipts} /> : null}
             {activeSection === "agents" ? (
               <AgentsSection
@@ -651,17 +736,16 @@ export default function CommandCenterPageClient() {
               <SimulatorSection
                 activeAgent={activeAgent}
                 recipients={recipients}
-                spendAmount={spendAmount}
-                setSpendAmount={setSpendAmount}
-                spendMint={spendMint}
-                setSpendMint={setSpendMint}
-                spendGoal={spendGoal}
-                setSpendGoal={setSpendGoal}
-                spendRecipient={spendRecipient}
-                setSpendRecipient={setSpendRecipient}
-                spendResult={spendResult}
-                submitSpendIntent={submitSpendIntent}
-                isSubmitting={isSubmitting}
+                simulatorAmount={simulatorAmount}
+                setSimulatorAmount={setSimulatorAmount}
+                simulatorMint={simulatorMint}
+                setSimulatorMint={setSimulatorMint}
+                simulatorGoal={simulatorGoal}
+                setSimulatorGoal={setSimulatorGoal}
+                simulatorRecipient={simulatorRecipient}
+                setSimulatorRecipient={setSimulatorRecipient}
+                simulatorResult={simulatorResult}
+                runSimulator={runSimulator}
               />
             ) : null}
             {activeSection === "settings" ? (
@@ -953,29 +1037,139 @@ function FirewallSection({
   );
 }
 
-function ExecutionsSection({ receipts }: { receipts: CommandCenterReceipt[] }) {
+function ExecutionsSection({
+  activeAgent,
+  recipients,
+  receipts,
+  spendAmount,
+  setSpendAmount,
+  spendMint,
+  setSpendMint,
+  spendGoal,
+  setSpendGoal,
+  spendRecipient,
+  setSpendRecipient,
+  spendResult,
+  submitSpendIntent,
+  isSubmitting
+}: {
+  activeAgent: CommandCenterAgent | null;
+  recipients: CommandCenterRecipient[];
+  receipts: CommandCenterReceipt[];
+  spendAmount: string;
+  setSpendAmount: (value: string) => void;
+  spendMint: string;
+  setSpendMint: (value: string) => void;
+  spendGoal: string;
+  setSpendGoal: (value: string) => void;
+  spendRecipient: string;
+  setSpendRecipient: (value: string) => void;
+  spendResult: SpendResult;
+  submitSpendIntent: (event: FormEvent<HTMLFormElement>) => void;
+  isSubmitting: boolean;
+}) {
   return (
-    <Panel>
-      <PanelTitle>Execution Queue</PanelTitle>
-      <DataTable
-        columns={["Paylink ID", "Agent", "Amount", "Recipient", "Status", "Rail", "Time", "Action"]}
-        emptyTitle="No executions"
-        emptyBody="Pending, blocked, confirmed, and failed executions will appear here."
-      >
-        {receipts.map((receipt) => (
-          <tr key={receipt.id} className="border-t border-white/[0.07]">
-            <td className="px-3 py-4 font-medium text-violet-300">{receipt.paylinkId}</td>
-            <td className="px-3 py-4 text-zinc-300">{receipt.agent}</td>
-            <td className="px-3 py-4 text-white">{receipt.amount} {receipt.mint}</td>
-            <td className="px-3 py-4 text-zinc-300">{compactAddress(receipt.recipient)}</td>
-            <td className="px-3 py-4"><StatusBadge status={receipt.status} /></td>
-            <td className="px-3 py-4 text-zinc-300">{formatRail(receipt.executionRail)}</td>
-            <td className="px-3 py-4 text-zinc-300">{formatCountdown(receipt.createdAt)}</td>
-            <td className="px-3 py-4"><ExplorerLink url={receipt.explorerUrl} /></td>
-          </tr>
-        ))}
-      </DataTable>
-    </Panel>
+    <div className="grid gap-4">
+      <Panel>
+        <div className="grid gap-6 xl:grid-cols-[0.82fr_1.18fr]">
+          <div>
+            <PanelTitle>Create Spend Intent</PanelTitle>
+            <div className="mt-5 rounded-lg border border-violet-400/15 bg-violet-500/[0.04] p-4">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">Active Agent</div>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <div className="text-[20px] font-medium text-white">{activeAgent?.name ?? "No active agent"}</div>
+                {activeAgent ? <StatusBadge status="active">Active</StatusBadge> : <StatusBadge status="inactive">Unavailable</StatusBadge>}
+              </div>
+              <div className="mt-3 text-[14px] text-zinc-400">
+                {activeAgent ? `${formatRail(activeAgent.executionMode)} - ${compactAddress(activeAgent.defaultRecipientAddress)}` : "Add or select an agent before creating a real spend intent."}
+              </div>
+            </div>
+            <form className="mt-5 space-y-4" onSubmit={submitSpendIntent}>
+              <div className="grid gap-3 sm:grid-cols-[1fr_0.7fr]">
+                <Field label="Amount">
+                  <StyledInput
+                    value={spendAmount}
+                    onChange={(event) => setSpendAmount(event.target.value)}
+                    placeholder="1"
+                    inputMode="numeric"
+                    aria-label="Spend amount"
+                  />
+                </Field>
+                <Field label="Mint">
+                  <StyledInput value={spendMint} onChange={(event) => setSpendMint(event.target.value)} placeholder="USDC" aria-label="Spend mint" />
+                </Field>
+              </div>
+              <Field label="Recipient">
+                <StyledSelect value={spendRecipient} onChange={(event) => setSpendRecipient(event.target.value)} aria-label="Spend recipient">
+                  <option value="" className="bg-[#080812] text-zinc-400">
+                    Active agent default
+                  </option>
+                  {recipients.map((recipient) => (
+                    <option key={recipient.label} value={recipient.address} className="bg-[#080812] text-white">
+                      {recipient.label} - {compactAddress(recipient.address)}
+                    </option>
+                  ))}
+                </StyledSelect>
+              </Field>
+              <Field label="Intent">
+                <StyledTextarea value={spendGoal} onChange={(event) => setSpendGoal(event.target.value)} placeholder="buy coffee" aria-label="Spend goal" />
+              </Field>
+              <ControlButton type="submit" disabled={!activeAgent || isSubmitting} className="w-full justify-center">
+                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                Create Spend Intent
+              </ControlButton>
+            </form>
+          </div>
+
+          <div>
+            <PanelTitle>Pending Execution</PanelTitle>
+            <div className="mt-5">
+              {spendResult ? (
+                <div className="rounded-lg border border-white/[0.08] bg-white/[0.025] p-5">
+                  <div className="flex items-center gap-3">
+                    {spendResult.decision === "blocked" ? <XCircle className="h-5 w-5 text-red-400" /> : <CheckCircle2 className="h-5 w-5 text-emerald-400" />}
+                    <div className="text-[21px] font-medium text-white">
+                      {spendResult.decision === "blocked" ? "Spend intent blocked" : "Pending execution created"}
+                    </div>
+                  </div>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <SoftMetric label="Paylink ID" value={spendResult.paylinkId ?? "None"} />
+                    <SoftMetric label="Status" value={spendResult.status === "pending_execution" ? "pending execution" : spendResult.status ?? spendResult.decision ?? "pending execution"} />
+                    <SoftMetric label="Rail" value={formatRail(spendResult.rail ?? "magicblock-private")} />
+                    <SoftMetric label="Recipient" value={compactAddress(spendResult.recipient)} />
+                  </div>
+                  {spendResult.reason ? <div className="mt-4 text-[14px] text-zinc-400">{spendResult.reason}</div> : null}
+                </div>
+              ) : (
+                <EmptyState title="No pending intent" body="Create a spend intent here for real devnet execution. Simulator remains dry-run only." />
+              )}
+            </div>
+          </div>
+        </div>
+      </Panel>
+
+      <Panel>
+        <PanelTitle>Execution Queue</PanelTitle>
+        <DataTable
+          columns={["Paylink ID", "Agent", "Amount", "Recipient", "Status", "Rail", "Time", "Action"]}
+          emptyTitle="No executions"
+          emptyBody="Pending, blocked, confirmed, and failed executions will appear here."
+        >
+          {receipts.map((receipt) => (
+            <tr key={receipt.id} className="border-t border-white/[0.07]">
+              <td className="px-3 py-4 font-medium text-violet-300">{receipt.paylinkId}</td>
+              <td className="px-3 py-4 text-zinc-300">{receipt.agent}</td>
+              <td className="px-3 py-4 text-white">{receipt.amount} {receipt.mint}</td>
+              <td className="px-3 py-4 text-zinc-300">{compactAddress(receipt.recipient)}</td>
+              <td className="px-3 py-4"><StatusBadge status={receipt.status} /></td>
+              <td className="px-3 py-4 text-zinc-300">{formatRail(receipt.executionRail)}</td>
+              <td className="px-3 py-4 text-zinc-300">{formatCountdown(receipt.createdAt)}</td>
+              <td className="px-3 py-4"><ExplorerLink url={receipt.explorerUrl} /></td>
+            </tr>
+          ))}
+        </DataTable>
+      </Panel>
+    </div>
   );
 }
 
@@ -1041,7 +1235,7 @@ function AgentsSection({
                 </div>
                 <div className="flex flex-wrap gap-2 lg:justify-end">
                   <ControlButton disabled={agent.isActive || isSubmitting} onClick={() => useAgent(agent.id)}>
-                    Use Agent
+                    Set Active Vault
                   </ControlButton>
                   <ControlButton disabled title="No web token generation endpoint is exposed.">
                     <KeyRound className="h-3.5 w-3.5" />
@@ -1051,20 +1245,108 @@ function AgentsSection({
               </div>
             </div>
           ))}
-          {agents.length === 0 ? <EmptyState title="No agents" body="Add an agent to start routing spend intents." /> : null}
+          {agents.length === 0 ? <EmptyState title="No Agent Vaults" body="Add an Agent Vault to create policy and limits for spend intents." /> : null}
         </div>
       </Panel>
 
-      <Panel>
-        <PanelTitle>Add Agent</PanelTitle>
-        <form className="mt-6 space-y-3" onSubmit={createAgent}>
-          <StyledInput value={newAgentName} onChange={(event) => setNewAgentName(event.target.value)} placeholder="agent name" aria-label="New agent name" />
-          <ControlButton type="submit" disabled={isSubmitting} className="w-full justify-center">
-            <Plus className="h-4 w-4" />
-            Add Agent
-          </ControlButton>
-        </form>
-      </Panel>
+      <div className="grid gap-4">
+        <Panel>
+          <PanelTitle>Add Agent Vault</PanelTitle>
+          <p className="mt-4 text-[15px] text-zinc-400">
+            Adding an Agent Vault creates policy and limits. The agent becomes connected when it uses Telegram or the API token to submit spend intents.
+          </p>
+          <form className="mt-6 space-y-3" onSubmit={createAgent}>
+            <StyledInput value={newAgentName} onChange={(event) => setNewAgentName(event.target.value)} placeholder="agent vault name" aria-label="New Agent Vault name" />
+            <ControlButton type="submit" disabled={isSubmitting} className="w-full justify-center">
+              <Plus className="h-4 w-4" />
+              Add Agent Vault
+            </ControlButton>
+          </form>
+        </Panel>
+
+        {agents.length > 0 ? <ConnectAgentPanel agent={agents.find((agent) => agent.isActive) ?? agents[0] ?? null} /> : null}
+      </div>
+    </div>
+  );
+}
+
+function ConnectAgentPanel({ agent }: { agent: CommandCenterAgent | null }) {
+  const agentName = agent?.name ?? "agent-name";
+  const telegramBotAvailable = TELEGRAM_REFERENCE_BOT_URL.length > 0;
+
+  return (
+    <Panel>
+      <PanelTitle>Connect Agent</PanelTitle>
+      <p className="mt-4 text-[15px] text-zinc-400">
+        Web Command Center is the controller/admin surface. Telegram is the reference external agent interface. BYO Agent API is for custom AI agents.
+      </p>
+
+      <div className="mt-5 grid gap-3">
+        <ConnectionMethod
+          title="Telegram Reference Agent"
+          detail="Use the Telegram bot to link this controller, select a vault, and submit a spend intent."
+          action={
+            <ControlButton asAnchor href={telegramBotAvailable ? TELEGRAM_REFERENCE_BOT_URL : "#"} disabled={!telegramBotAvailable} title={telegramBotAvailable ? "Open Telegram bot" : "Set NEXT_PUBLIC_TELEGRAM_BOT_URL to enable this link."}>
+              <ExternalLink className="h-3.5 w-3.5" />
+              Open Telegram bot
+            </ControlButton>
+          }
+          steps={[
+            <>Use <code className="text-violet-200">/link &lt;code&gt;</code> if needed</>,
+            <>Use <code className="text-violet-200">{`/agent use ${agentName}`}</code></>,
+            <>Use <code className="text-violet-200">/spend 1 buy coffee</code></>
+          ]}
+        />
+
+        <ConnectionMethod
+          title="BYO Agent API"
+          detail="Give a custom AI agent its own token, then submit spend intents through the controller API."
+          action={
+            <ControlButton disabled title="Token generation is available through the existing agent registry flow, without a web endpoint change.">
+              <KeyRound className="h-3.5 w-3.5" />
+              Generate Agent Token
+            </ControlButton>
+          }
+          steps={[
+            <>POST <code className="text-violet-200">/api/agent/intents</code></>,
+            <>Authorization: <code className="text-violet-200">Bearer &lt;token&gt;</code></>
+          ]}
+        />
+      </div>
+    </Panel>
+  );
+}
+
+function ConnectionMethod({
+  title,
+  detail,
+  action,
+  steps
+}: {
+  title: string;
+  detail: string;
+  action: ReactNode;
+  steps: ReactNode[];
+}) {
+  return (
+    <div className="rounded-lg border border-white/[0.08] bg-white/[0.025] p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="text-[17px] font-medium text-white">{title}</div>
+          <p className="mt-1 text-[14px] text-zinc-500">{detail}</p>
+        </div>
+        <div className="shrink-0">{action}</div>
+      </div>
+      <ol className="mt-4 space-y-2 text-[14px] text-zinc-300">
+        {steps.map((step, index) => (
+          <li key={index} className="flex gap-2">
+            <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-violet-300/18 bg-violet-400/8 text-[11px] text-violet-200">
+              {index + 1}
+            </span>
+            <span className="min-w-0 break-words">{step}</span>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
@@ -1072,57 +1354,61 @@ function AgentsSection({
 function SimulatorSection({
   activeAgent,
   recipients,
-  spendAmount,
-  setSpendAmount,
-  spendMint,
-  setSpendMint,
-  spendGoal,
-  setSpendGoal,
-  spendRecipient,
-  setSpendRecipient,
-  spendResult,
-  submitSpendIntent,
-  isSubmitting
+  simulatorAmount,
+  setSimulatorAmount,
+  simulatorMint,
+  setSimulatorMint,
+  simulatorGoal,
+  setSimulatorGoal,
+  simulatorRecipient,
+  setSimulatorRecipient,
+  simulatorResult,
+  runSimulator
 }: {
   activeAgent: CommandCenterAgent | null;
   recipients: CommandCenterRecipient[];
-  spendAmount: string;
-  setSpendAmount: (value: string) => void;
-  spendMint: string;
-  setSpendMint: (value: string) => void;
-  spendGoal: string;
-  setSpendGoal: (value: string) => void;
-  spendRecipient: string;
-  setSpendRecipient: (value: string) => void;
-  spendResult: SpendResult;
-  submitSpendIntent: (event: FormEvent<HTMLFormElement>) => void;
-  isSubmitting: boolean;
+  simulatorAmount: string;
+  setSimulatorAmount: (value: string) => void;
+  simulatorMint: string;
+  setSimulatorMint: (value: string) => void;
+  simulatorGoal: string;
+  setSimulatorGoal: (value: string) => void;
+  simulatorRecipient: string;
+  setSimulatorRecipient: (value: string) => void;
+  simulatorResult: SimulatorResult;
+  runSimulator: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[0.82fr_1.18fr]">
       <Panel>
         <span className="sr-only">{dashboardSourceLabels.spendIntentPanel}</span>
-        <PanelTitle>Rogue Simulator</PanelTitle>
-        <form className="mt-6 space-y-4" onSubmit={submitSpendIntent}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <PanelTitle>Rogue Simulator</PanelTitle>
+          <span className="rounded-full border border-violet-300/20 bg-violet-500/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-violet-200">
+            DRY RUN — no pending execution created
+          </span>
+        </div>
+        <p className="mt-4 text-[15px] text-zinc-400">Use Create Spend Intent for real devnet execution.</p>
+        <form className="mt-6 space-y-4" onSubmit={runSimulator}>
           <div className="grid gap-3 sm:grid-cols-[1fr_0.7fr]">
             <Field label="Amount">
               <StyledInput
-                value={spendAmount}
-                onChange={(event) => setSpendAmount(event.target.value)}
+                value={simulatorAmount}
+                onChange={(event) => setSimulatorAmount(event.target.value)}
                 placeholder="1"
                 inputMode="numeric"
-                aria-label="Spend amount"
+                aria-label="Simulation amount"
               />
             </Field>
             <Field label="Mint">
-              <StyledInput value={spendMint} onChange={(event) => setSpendMint(event.target.value)} placeholder="USDC" aria-label="Spend mint" />
+              <StyledInput value={simulatorMint} onChange={(event) => setSimulatorMint(event.target.value)} placeholder="USDC" aria-label="Simulation mint" />
             </Field>
           </div>
           <Field label="Recipient">
             <StyledSelect
-              value={spendRecipient}
-              onChange={(event) => setSpendRecipient(event.target.value)}
-              aria-label="Spend recipient"
+              value={simulatorRecipient}
+              onChange={(event) => setSimulatorRecipient(event.target.value)}
+              aria-label="Simulation recipient"
             >
               <option value="" className="bg-[#080812] text-zinc-400">
                 Active agent default
@@ -1136,14 +1422,14 @@ function SimulatorSection({
           </Field>
           <Field label="Intent">
             <StyledTextarea
-              value={spendGoal}
-              onChange={(event) => setSpendGoal(event.target.value)}
+              value={simulatorGoal}
+              onChange={(event) => setSimulatorGoal(event.target.value)}
               placeholder="buy coffee"
-              aria-label="Spend goal"
+              aria-label="Simulation goal"
             />
           </Field>
-          <ControlButton type="submit" disabled={!activeAgent || isSubmitting} className="w-full justify-center">
-            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldX className="h-4 w-4" />}
+          <ControlButton type="submit" disabled={!activeAgent} className="w-full justify-center">
+            <ShieldX className="h-4 w-4" />
             Run Simulation
           </ControlButton>
         </form>
@@ -1152,21 +1438,23 @@ function SimulatorSection({
       <Panel>
         <PanelTitle>Result Panel</PanelTitle>
         <div className="mt-6">
-          {spendResult ? (
+          {simulatorResult ? (
             <div className="rounded-lg border border-white/[0.08] bg-white/[0.025] p-5">
               <div className="flex items-center gap-3">
-                {spendResult.decision === "blocked" ? <XCircle className="h-5 w-5 text-red-400" /> : <CheckCircle2 className="h-5 w-5 text-emerald-400" />}
-                <div className="text-[21px] font-medium capitalize text-white">{spendResult.decision ?? "approved"}</div>
+                {simulatorResult.decision === "blocked" ? <XCircle className="h-5 w-5 text-red-400" /> : <CheckCircle2 className="h-5 w-5 text-emerald-400" />}
+                <div className="text-[21px] font-medium text-white">
+                  {simulatorResult.decision === "blocked" ? "Would be blocked" : "Would be approved"}
+                </div>
               </div>
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <SoftMetric label="Reason" value={spendResult.reason ?? "Policy accepted the intent."} />
-                <SoftMetric label="Paylink ID" value={spendResult.paylinkId ?? "None"} />
-                <SoftMetric label="Rail" value={formatRail(spendResult.rail)} />
-                <SoftMetric label="Recipient" value={compactAddress(spendResult.recipient)} />
+                <SoftMetric label="Reason" value={simulatorResult.reason} />
+                <SoftMetric label="Agent" value={simulatorResult.agent} />
+                <SoftMetric label="Amount" value={`${simulatorResult.amount} ${simulatorResult.mint}`} />
+                <SoftMetric label="Recipient" value={compactAddress(simulatorResult.recipient)} />
               </div>
             </div>
           ) : (
-            <EmptyState title="Awaiting simulation" body={activeAgent ? "Run a controlled spend intent to see the firewall decision." : "Create or select an agent before running simulations."} />
+            <EmptyState title="Awaiting simulation" body={activeAgent ? "Run a controlled dry-run to see the firewall-style decision." : "Create or select an agent before running simulations."} />
           )}
         </div>
       </Panel>
