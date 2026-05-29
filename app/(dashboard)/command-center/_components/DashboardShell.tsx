@@ -3,10 +3,10 @@
 import type { FormEvent } from "react";
 import { BookOpenText, Gauge, Github, Home, ReceiptText, Settings, ShieldCheck, Sparkles, Swords, Twitter, UsersRound } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { DOCS_URL, GITHUB_URL, sectionCopy, X_URL } from "./constants";
+import { DOCS_URL, GITHUB_URL, X_URL } from "./constants";
 import type { CommandCenterAgent, CommandCenterReceipt, CommandCenterRecipient, GeneratedAgentTokenState, Notice, SectionId, SimulatorResult, SpendResult } from "./types";
 import { AgentsSection, AllowanceSection, ExecutionsSection, FirewallSection, OverviewCards, ReceiptsSection, SettingsSection, SimulatorPanel } from "./sections";
-import { HeaderWalletButton, LoadingStrip, NoticeBanner, SidebarFooterLink, Sigil } from "./ui";
+import { LoadingStrip, NoticeBanner, SidebarFooterLink, Sigil, StatusPill, TopStatusBar } from "./ui";
 import { CommandCenterModals } from "./Modals";
 
 const navItems: { id: SectionId; label: string; icon: typeof Home }[] = [
@@ -77,22 +77,31 @@ export interface DashboardShellProps {
 }
 
 export function DashboardShell(props: DashboardShellProps) {
-  const copy = sectionCopy[props.activeSection];
+  const runtimeLabel =
+    props.activeSection === "simulator"
+      ? "Operational"
+      : props.activeSection === "firewall"
+        ? "Firewall Active"
+        : props.activeSection === "allowance"
+          ? "Private Rail Ready"
+          : "Runtime Ready";
 
   return (
-    <div className="relative min-h-dvh bg-[#03030A] bg-[radial-gradient(circle_at_50%_0%,rgba(115,70,255,0.22),transparent_31%),linear-gradient(180deg,#03030A_0%,#050510_50%,#020207_100%)] text-white after:pointer-events-none after:absolute after:inset-0 after:hidden after:bg-[linear-gradient(rgba(155,111,255,0.032)_1px,transparent_1px),linear-gradient(90deg,rgba(155,111,255,0.032)_1px,transparent_1px)] after:bg-[size:72px_72px] after:opacity-30 md:after:block">
+    <div className="relative min-h-dvh bg-[#03030A] bg-[radial-gradient(circle_at_55%_0%,rgba(58,103,255,0.20),transparent_30%),radial-gradient(circle_at_45%_16%,rgba(124,58,237,0.24),transparent_36%),linear-gradient(180deg,#03030A_0%,#071022_48%,#020207_100%)] text-white after:pointer-events-none after:absolute after:inset-0 after:hidden after:bg-[linear-gradient(rgba(128,156,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(128,156,255,0.035)_1px,transparent_1px)] after:bg-[size:76px_76px] after:[mask-image:radial-gradient(circle_at_58%_24%,black,transparent_78%)] md:after:block">
       <div className="relative mx-auto grid min-h-dvh w-full max-w-[1600px] grid-cols-1 lg:grid-cols-[264px_minmax(0,1fr)]">
         <Sidebar activeSection={props.activeSection} setActiveSection={props.setActiveSection} />
         <div className="min-w-0">
           <MobileNav activeSection={props.activeSection} setActiveSection={props.setActiveSection} />
-          <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-8 lg:py-8 xl:px-9">
-            <header className="mb-7 flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
-              <div className="min-w-0">
-                <h1 className="break-words text-[30px] font-medium leading-tight tracking-normal text-white sm:text-[32px]">{copy.title}</h1>
-                <p className="mt-1 text-[16px] text-zinc-400">{copy.subtitle}</p>
-              </div>
-              <HeaderWalletButton connected={props.walletConnected} connecting={props.walletConnecting} onClick={props.onWalletAction} />
-            </header>
+          <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-8 lg:py-6 xl:px-9">
+            <div className="mb-6 flex justify-end">
+              <TopStatusBar
+                connected={props.walletConnected}
+                connecting={props.walletConnecting}
+                onWalletAction={props.onWalletAction}
+                runtimeLabel={runtimeLabel}
+                networkLabel="Devnet"
+              />
+            </div>
 
             {props.notice ? <NoticeBanner notice={props.notice} /> : null}
             {props.isLoading ? <LoadingStrip /> : null}
@@ -187,17 +196,23 @@ export function DashboardShell(props: DashboardShellProps) {
 
 export function Sidebar({ activeSection, setActiveSection }: { activeSection: SectionId; setActiveSection: (section: SectionId) => void }) {
   return (
-    <aside className="hidden min-w-0 border-r border-white/10 bg-[#050510]/86 px-6 py-7 backdrop-blur-xl lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col">
-      <div className="flex h-full flex-col gap-6">
+    <aside className="hidden min-w-0 border-r border-[#25345E] bg-[#040B19]/78 px-6 py-7 shadow-[inset_-1px_0_0_rgba(255,255,255,0.02)] backdrop-blur-xl lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col">
+      <div className="flex h-full flex-col gap-7">
         <div className="flex items-center gap-3">
-          <Sigil className="h-11 w-11" />
+          <Sigil className="h-12 w-12 drop-shadow-[0_0_20px_rgba(168,85,247,0.85)]" />
           <div>
             <div className="text-[17px] font-semibold uppercase tracking-[0.11em] text-white">WhisperVault</div>
-            <div className="text-[13px] text-violet-200/48">Private spend control</div>
+            <div className="text-[12px] text-violet-200/58">Private by design</div>
           </div>
         </div>
         <NavList activeSection={activeSection} setActiveSection={setActiveSection} orientation="vertical" />
-        <div className="mt-auto flex w-full items-center justify-center gap-2">
+        <div className="mt-auto space-y-5">
+          <StatusPill
+            icon={<span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.9)]" />}
+            label="Devnet Connected"
+            className="w-full justify-start"
+          />
+          <div className="flex w-full items-center justify-center gap-2">
           <SidebarFooterLink href={GITHUB_URL} label="GitHub">
             <Github className="h-4 w-4" />
           </SidebarFooterLink>
@@ -207,6 +222,7 @@ export function Sidebar({ activeSection, setActiveSection }: { activeSection: Se
           <SidebarFooterLink href={DOCS_URL} label="Docs / README">
             <BookOpenText className="h-4 w-4" />
           </SidebarFooterLink>
+          </div>
         </div>
       </div>
     </aside>
@@ -215,12 +231,12 @@ export function Sidebar({ activeSection, setActiveSection }: { activeSection: Se
 
 export function MobileNav({ activeSection, setActiveSection }: { activeSection: SectionId; setActiveSection: (section: SectionId) => void }) {
   return (
-    <div className="sticky top-0 z-30 border-b border-white/10 bg-[#03030A]/92 px-4 py-3 backdrop-blur-xl lg:hidden">
+    <div className="sticky top-0 z-30 border-b border-[#25345E] bg-[#040B19]/94 px-4 py-3 backdrop-blur-xl lg:hidden">
       <div className="mb-3 flex items-center gap-3">
         <Sigil className="h-9 w-9" />
         <div className="min-w-0">
           <div className="truncate text-[15px] font-semibold uppercase tracking-[0.11em] text-white">WhisperVault</div>
-          <div className="text-[12px] text-violet-200/48">Private spend control</div>
+          <div className="text-[12px] text-violet-200/58">Private by design</div>
         </div>
       </div>
       <NavList activeSection={activeSection} setActiveSection={setActiveSection} orientation="horizontal" />
@@ -241,10 +257,10 @@ function NavList({ activeSection, setActiveSection, orientation }: { activeSecti
             type="button"
             onClick={() => setActiveSection(item.id)}
             className={cn(
-              "group flex min-h-11 shrink-0 items-center gap-3 rounded-lg border px-3 text-left text-[16px] transition",
+              "group flex min-h-11 shrink-0 items-center gap-3 rounded-lg border px-3 text-left text-[15px] transition",
               isActive
-                ? "border-violet-400/25 bg-violet-600/18 text-white shadow-[0_0_32px_rgba(126,71,255,0.18)]"
-                : "border-transparent text-violet-100/70 hover:border-violet-400/18 hover:bg-white/[0.035] hover:text-white"
+                ? "border-violet-400/45 bg-[linear-gradient(135deg,rgba(91,33,182,0.52),rgba(30,41,105,0.66))] text-white shadow-[0_0_30px_rgba(124,58,237,0.28)]"
+                : "border-transparent text-slate-300 hover:border-violet-400/20 hover:bg-white/[0.04] hover:text-white"
             )}
           >
             <Icon className={cn("h-4 w-4", isActive ? "text-violet-300" : "text-violet-200/70")} />

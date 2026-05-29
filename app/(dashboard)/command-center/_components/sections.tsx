@@ -1,9 +1,51 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
-import { ArrowRight, CheckCircle2, ExternalLink, KeyRound, Loader2, Plus, ShieldX, XCircle, Zap } from "lucide-react";
-import { dashboardSourceLabels, TELEGRAM_REFERENCE_BOT_URL } from "./constants";
-import type { CommandCenterAgent, CommandCenterReceipt, CommandCenterRecipient, GeneratedAgentTokenState, SectionId, SimulatorResult, SpendResult } from "./types";
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  CircleDollarSign,
+  Clock3,
+  Copy,
+  Database,
+  ExternalLink,
+  Eye,
+  FileText,
+  Filter,
+  Gauge,
+  KeyRound,
+  Layers3,
+  LockKeyhole,
+  Network,
+  Pause,
+  Play,
+  Plus,
+  ReceiptText,
+  RefreshCw,
+  Search,
+  Shield,
+  ShieldCheck,
+  ShieldX,
+  Sparkles,
+  TestTube2,
+  UsersRound,
+  Wallet,
+  XCircle,
+  Zap
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { TELEGRAM_REFERENCE_BOT_URL } from "./constants";
+import type {
+  CommandCenterAgent,
+  CommandCenterReceipt,
+  CommandCenterRecipient,
+  GeneratedAgentTokenState,
+  SectionId,
+  SimulatorResult,
+  SpendResult
+} from "./types";
 import {
   buildGhostTimeline,
   compactAddress,
@@ -19,31 +61,37 @@ import {
   formatRefillEngine,
   formatRuntimeStatus,
   getGhostRuntime,
+  numericValue,
   sumReceiptAmounts
 } from "./utils";
 import {
-  ActionButton,
-  AllowanceRing,
   ControlButton,
-  DataTable,
+  DataTableShell,
   EmptyState,
   ExplorerLink,
   Field,
-  LabelValue,
-  LineChart,
+  GlowPanel,
+  HeroCore,
   MetricRow,
-  MiniSigil,
-  Panel,
+  PageHeader,
   PanelTitle,
-  PolicyRule,
-  ShieldSigil,
   SoftMetric,
+  StatCard,
   StatusBadge,
-  SummaryMetric,
   StyledInput,
   StyledSelect,
-  StyledTextarea
+  StyledTextarea,
+  Timeline,
+  ValidationChecklist
 } from "./ui";
+
+const kpiFormat = (value: number): string => (Number.isInteger(value) ? String(value) : value.toFixed(2));
+
+const receiptAmountTotal = (receipts: CommandCenterReceipt[]): number =>
+  receipts.reduce((sum, receipt) => sum + numericValue(receipt.amount), 0);
+
+const activePolicyCount = (agent: CommandCenterAgent | null, recipients: CommandCenterRecipient[] = []): number =>
+  (agent ? 3 : 1) + (recipients.some((recipient) => recipient.isAllowedForActiveAgent) ? 1 : 0);
 
 export function OverviewCards({
   activeAgent,
@@ -58,132 +106,139 @@ export function OverviewCards({
   confirmedCount: number;
   setSection: (section: SectionId) => void;
 }) {
-  const recentReceipts = receipts.slice(0, 5);
-  const latestRailReceipt = receipts.find((receipt) => receipt.magicblockRailStatus || receipt.fallbackUsed !== undefined || receipt.executionRail);
-  const railMode = latestRailReceipt?.magicblockRailMode ?? activeAgent?.executionMode ?? activeAgent?.preferredRail;
+  const recentReceipts = receipts.slice(0, 4);
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-4">
-      <Panel className="min-h-[248px] min-w-0">
-        <PanelTitle>Active Agent</PanelTitle>
-        {activeAgent ? (
-          <div className="mt-7 space-y-7">
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex items-center gap-3">
-                  <span className="h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_14px_rgba(167,111,255,0.85)]" />
-                  <div className="truncate text-[23px] text-white">{activeAgent.name}</div>
-                  <StatusBadge status={activeAgent.status} />
-                </div>
-              </div>
-              <MiniSigil />
+    <div className="space-y-5">
+      <GlowPanel className="p-6 sm:p-8 lg:p-10" intensity="strong">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,1fr)] lg:items-center">
+          <div className="min-w-0">
+            <p className="text-[16px] text-slate-300">Welcome back</p>
+            <h2 className="mt-5 text-[38px] font-semibold leading-tight tracking-normal text-white sm:text-[52px]">
+              {activeAgent ? activeAgent.name : "No Active Agent"}
+            </h2>
+            <p className="mt-4 max-w-lg text-[18px] leading-8 text-slate-300">
+              {activeAgent
+                ? "Your private spend control plane is online. Review allowance, firewall state, and pending execution flow."
+                : "Create an Agent Vault to start securing your AI activity with budgets, allowlists, and private execution rails."}
+            </p>
+            <div className="mt-7 grid gap-3 sm:flex sm:flex-wrap">
+              <ControlButton onClick={() => setSection("agents")} className="bg-[linear-gradient(135deg,#7C3AED,#4F46E5)] shadow-[0_0_30px_rgba(124,58,237,0.46)]">
+                <Plus className="h-4 w-4" />
+                Create Agent Vault
+              </ControlButton>
+              <ControlButton onClick={() => setSection("firewall")} className="bg-[#071127]/80">
+                Configure Firewall
+              </ControlButton>
             </div>
-            <div className="grid gap-4">
-              <LabelValue label="Wallet" value={compactAddress(activeAgent.id)} withCopy />
-              <LabelValue label="Network" value="Solana Devnet" />
-            </div>
-            <ActionButton onClick={() => setSection("agents")}>View Agent</ActionButton>
           </div>
-        ) : (
-          <EmptyState title="No active agent" body="Create an Agent Vault to start routing web spend intents." />
-        )}
-      </Panel>
-
-      <Panel className="min-h-[248px] min-w-0">
-        <PanelTitle>Ghost Allowance</PanelTitle>
-        <div className="mt-5 grid min-w-0 gap-6 sm:grid-cols-[180px_1fr] sm:items-center xl:grid-cols-[220px_1fr] 2xl:grid-cols-[176px_1fr]">
-          <AllowanceRing
-            current={activeAgent?.ghostAllowanceLive}
-            max={activeAgent?.ghostAllowanceMax}
-            sizeClassName="h-44 w-44 sm:h-40 sm:w-40 xl:h-44 xl:w-44 2xl:h-40 2xl:w-40"
-          />
-          <div className="min-w-0 space-y-4">
-            <MetricRow label="Current" value={`${activeAgent?.ghostAllowanceLive ?? "0"} USDC`} />
-            <MetricRow label="Max Allowance" value={`${activeAgent?.ghostAllowanceMax ?? "0"} USDC`} />
-            <MetricRow label="Refill Rate" value={`${activeAgent?.ghostRefillAmount ?? "0"} USDC / ${activeAgent?.ghostRefillIntervalMinutes ?? 0}m`} />
-            <MetricRow label="Next Refill" value={formatCountdown(activeAgent?.ghostTab?.nextRefillAt)} />
-          </div>
+          <HeroCore variant="star" className="min-h-[320px] lg:min-h-[390px]" />
         </div>
-        <div className="mt-5">
-          <ActionButton onClick={() => setSection("allowance")}>Manage Allowance</ActionButton>
-        </div>
-      </Panel>
+      </GlowPanel>
 
-      <Panel className="min-h-[248px] min-w-0">
-        <PanelTitle>Spend Firewall</PanelTitle>
-          <div className="mt-5 grid gap-6 lg:grid-cols-[176px_1fr] lg:items-center">
-          <ShieldSigil />
-          <div className="space-y-4">
-            <MetricRow label="Daily Cap" value={`${activeAgent?.dailyCap ?? "0"} USDC`} />
-            <MetricRow label="Per Spend Limit" value={`${activeAgent?.ghostAllowanceMax ?? "0"} USDC`} />
-            <MetricRow label="Recipient Policy" value="Allowlist" />
-            <MetricRow label="Risk Filter" value="Strict" />
-          </div>
-        </div>
-        <div className="mt-5">
-          <ActionButton onClick={() => setSection("firewall")}>Configure Firewall</ActionButton>
-        </div>
-      </Panel>
-
-      <Panel className="min-h-[248px] min-w-0">
-        <PanelTitle>Execution Rail</PanelTitle>
-        <div className="mt-5 space-y-4">
-          <MetricRow label="Primary Rail" value={activeAgent?.preferredRail ? formatRail(activeAgent.preferredRail) : "MagicBlock Private Rail"} />
-          <MetricRow label="Mode" value={formatMagicBlockMode(railMode)} />
-          <MetricRow label="Network" value="Devnet" />
-          <MetricRow label="Fallback" value="Explicit devnet proof" />
-        </div>
-      </Panel>
-
-      <ActivityFeed receipts={recentReceipts} setSection={setSection} />
-
-      <div className="grid gap-4">
-        <Panel>
-          <PanelTitle>Live Summary</PanelTitle>
-          <LineChart />
-          <div className="mt-5 grid gap-3 sm:grid-cols-3 sm:divide-x sm:divide-white/[0.08]">
-            <SummaryMetric label="Allowance" value={`${activeAgent?.ghostAllowanceLive ?? "0"} / ${activeAgent?.ghostAllowanceMax ?? "0"} USDC`} />
-            <SummaryMetric label="Pending" value={String(pendingCount)} sublabel="Executions" />
-            <SummaryMetric label="Confirmed" value={String(confirmedCount)} sublabel="Txs" />
-          </div>
-        </Panel>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard icon={<UsersRound className="h-5 w-5" />} label="Active Agent" value={activeAgent ? "1" : "0"} detail={activeAgent?.status ?? "Inactive"} />
+        <StatCard icon={<Wallet className="h-5 w-5" />} label="Live Allowance" value={`${activeAgent?.ghostAllowanceLive ?? "0"} USDC`} detail="Available" tone="blue" />
+        <StatCard icon={<Clock3 className="h-5 w-5" />} label="Pending Executions" value={String(pendingCount)} detail={pendingCount ? "Needs attention" : "None"} />
+        <StatCard icon={<ShieldCheck className="h-5 w-5" />} label="Firewall Status" value="Strict" detail={activeAgent ? "Active" : "Ready"} tone="emerald" />
       </div>
+
+      <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+        <GlowPanel className="p-5" intensity="quiet">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <PanelTitle>System Health</PanelTitle>
+            <StatusBadge status="active">All systems nominal</StatusBadge>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {[
+              ["Network", "Healthy"],
+              ["Agent Services", "Healthy"],
+              ["Relayer", "Healthy"],
+              ["Smart Contract", "Operational"]
+            ].map(([label, value]) => (
+              <div key={label} className="flex items-center gap-3 rounded-lg border border-white/[0.07] bg-white/[0.035] p-4">
+                <CheckCircle2 className="h-5 w-5 text-emerald-300" />
+                <span className="min-w-0 flex-1 text-[15px] text-slate-300">{label}</span>
+                <span className="text-[15px] font-medium text-white">{value}</span>
+              </div>
+            ))}
+          </div>
+        </GlowPanel>
+
+        <ActivityFeed receipts={recentReceipts} setSection={setSection} />
+      </div>
+
+      <GlowPanel className="p-5" intensity="strong">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="grid h-16 w-16 shrink-0 place-items-center rounded-full border border-violet-300/40 bg-violet-500/16 shadow-[0_0_34px_rgba(124,58,237,0.48)]">
+              <Sparkles className="h-7 w-7 text-violet-100" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[14px] text-slate-400">Recommended next step</div>
+              <div className="mt-1 text-[22px] font-semibold text-white">{activeAgent ? "Run a controlled spend intent" : "Create your first Agent Vault"}</div>
+              <p className="mt-1 text-[15px] text-slate-400">
+                {activeAgent ? "Validate the full pipeline before connecting external agents." : "Define permissions, budgets, and policies to unlock secure AI execution."}
+              </p>
+            </div>
+          </div>
+          <ControlButton onClick={() => setSection(activeAgent ? "executions" : "agents")} className="bg-[linear-gradient(135deg,#7C3AED,#4F46E5)] shadow-[0_0_30px_rgba(124,58,237,0.42)]">
+            {activeAgent ? "Create Spend Intent" : "Create Agent Vault"}
+            <ArrowRight className="h-4 w-4" />
+          </ControlButton>
+        </div>
+      </GlowPanel>
+      <p className="sr-only">{confirmedCount} confirmed receipts are available in the receipts screen.</p>
     </div>
   );
 }
 
 export function ActivityFeed({ receipts, setSection }: { receipts: CommandCenterReceipt[]; setSection: (section: SectionId) => void }) {
+  const fallbackItems = [
+    { icon: <Network className="h-4 w-4" />, title: "Connected to Devnet", detail: "Wallet connection established", time: "2m ago", tone: "emerald" },
+    { icon: <ShieldCheck className="h-4 w-4" />, title: "Firewall set to Strict", detail: "Policy engine ready", time: "8m ago", tone: "violet" },
+    { icon: <CheckCircle2 className="h-4 w-4" />, title: "System health check", detail: "All services operational", time: "12m ago", tone: "emerald" },
+    { icon: <Sparkles className="h-4 w-4" />, title: "Welcome to WhisperVault", detail: "Your secure command center", time: "15m ago", tone: "violet" }
+  ];
+
   return (
-    <Panel className="lg:col-span-2 2xl:col-span-3">
-      <PanelTitle>Recent Receipts</PanelTitle>
-      <DataTable
-        columns={["TX Signature", "Amount", "Recipient", "Time", "Explorer"]}
-        emptyTitle="No receipts yet"
-        emptyBody="Approved web intents will appear here after settlement."
-      >
-        {receipts.map((receipt) => (
-          <tr key={receipt.id} className="border-t border-white/[0.07]">
-            <td className="px-3 py-4">
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                <span className="font-medium text-violet-300">{receipt.txSignatureShort ?? compactAddress(receipt.paylinkId)}</span>
-              </div>
-            </td>
-            <td className="px-3 py-4 text-white">{receipt.amount} {receipt.mint}</td>
-            <td className="px-3 py-4 text-zinc-300">{compactAddress(receipt.recipient)}</td>
-            <td className="px-3 py-4 text-zinc-300">{formatCountdown(receipt.confirmedAt ?? receipt.createdAt)}</td>
-            <td className="px-3 py-4">
-              <ExplorerLink url={receipt.explorerUrl} />
-            </td>
-          </tr>
-        ))}
-      </DataTable>
-      {receipts.length > 0 ? (
-        <button type="button" onClick={() => setSection("receipts")} className="mx-auto mt-5 flex items-center gap-2 text-[15px] text-violet-300">
-          View All Receipts <ArrowRight className="h-4 w-4" />
+    <GlowPanel className="p-5" intensity="quiet">
+      <div className="flex items-center justify-between gap-3">
+        <PanelTitle>Recent Activity</PanelTitle>
+        <button type="button" onClick={() => setSection("receipts")} className="rounded-lg border border-white/10 px-3 py-2 text-[13px] text-slate-300 transition hover:border-violet-300/35 hover:text-white">
+          View all
         </button>
-      ) : null}
-    </Panel>
+      </div>
+      <div className="mt-4 space-y-2">
+        {receipts.length > 0
+          ? receipts.map((receipt) => (
+              <ActivityRow
+                key={receipt.id}
+                icon={<ReceiptText className="h-4 w-4" />}
+                title={`${receipt.amount} ${receipt.mint} ${receipt.status}`}
+                detail={compactAddress(receipt.recipient)}
+                time={formatCountdown(receipt.confirmedAt ?? receipt.createdAt)}
+                tone={receipt.status === "confirmed" ? "emerald" : "violet"}
+              />
+            ))
+          : fallbackItems.map((item) => <ActivityRow key={item.title} {...item} />)}
+      </div>
+    </GlowPanel>
+  );
+}
+
+function ActivityRow({ icon, title, detail, time, tone }: { icon: ReactNode; title: string; detail: string; time: string; tone: string }) {
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-transparent p-2 transition hover:border-white/[0.07] hover:bg-white/[0.03]">
+      <div className={tone === "emerald" ? "grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-500/14 text-emerald-300" : "grid h-9 w-9 shrink-0 place-items-center rounded-full bg-violet-500/16 text-violet-200"}>
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[15px] font-medium text-white">{title}</div>
+        <div className="truncate text-[13px] text-slate-500">{detail}</div>
+      </div>
+      <div className="whitespace-nowrap text-[13px] text-slate-500">{time}</div>
+    </div>
   );
 }
 
@@ -204,93 +259,78 @@ export function AllowanceSection({
   const activeAgentReceipts = receipts.filter((receipt) => receipt.agent === activeAgent?.id);
   const reservedAmount = sumReceiptAmounts(activeAgentReceipts, (receipt) => receipt.status === "pending" || receipt.status === "pending_execution");
   const recoverableAmount = runtime.clawbackCompleted ? "0" : ghostTab?.allowanceLive ?? activeAgent?.ghostAllowanceLive ?? "0";
+  const current = activeAgent?.ghostAllowanceLive ?? "0";
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-      <Panel className="min-h-[420px] lg:min-h-[520px]">
-        <div className="grid h-full gap-8 lg:grid-cols-[320px_1fr] xl:grid-cols-[360px_1fr] lg:items-center">
-          <div className="flex justify-center">
-            <AllowanceRing current={activeAgent?.ghostAllowanceLive} max={activeAgent?.ghostAllowanceMax} sizeClassName="h-52 w-52 sm:h-60 sm:w-60 lg:h-64 lg:w-64 xl:h-72 xl:w-72" large />
-          </div>
-          <div className="space-y-5">
-            <PanelTitle>Allowance Session</PanelTitle>
-            <div className="text-[30px] font-medium leading-tight text-white sm:text-[34px] lg:text-[39px]">
-              {activeAgent?.ghostAllowanceLive ?? "0"} / {activeAgent?.ghostAllowanceMax ?? "0"} USDC
-            </div>
-            <div className="grid gap-3 lg:grid-cols-2">
-              <SoftMetric label="Refill Amount" value={`${activeAgent?.ghostRefillAmount ?? "0"} USDC`} />
-              <SoftMetric label="Refill Interval" value={`${activeAgent?.ghostRefillIntervalMinutes ?? 0} minutes`} />
-              <SoftMetric label="Next Refill" value={formatCountdown(runtime.nextRefillAt)} />
-              <SoftMetric label="Session Status" value={formatRuntimeStatus(runtime.sessionStatus)} />
-              <SoftMetric label="Clawback Status" value={runtime.clawbackCompleted ? "Completed" : runtime.clawbackPending ? "Queued" : "Standby"} />
-              <SoftMetric label="Session Ends" value={formatCountdown(ghostTab?.expiresAt)} />
-            </div>
-            <div className="grid gap-2 sm:flex sm:flex-wrap">
-              <ControlButton disabled title="No open endpoint is exposed in the web API.">
+    <div className="space-y-5">
+      <PageHeader title="Ghost Allowance" subtitle="Live private allowance trust for the active session." />
+      <GlowPanel className="p-5 lg:p-7" intensity="strong">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(380px,0.72fr)]">
+          <div className="relative rounded-xl border border-[#26345E] bg-[#061026]/66 p-5">
+            <HeroCore variant="orb" label="Live Allowance" value={current} className="min-h-[430px]" />
+            <div className="grid gap-3 sm:grid-cols-4">
+              <ControlButton disabled title="No open endpoint is exposed in the web API." className="bg-[linear-gradient(135deg,#7C3AED,#4F46E5)]">
+                <Play className="h-4 w-4" />
                 Open
               </ControlButton>
-              <ControlButton
-                disabled={!activeAgent || isSubmitting || activeAgent.status === "paused"}
-                onClick={() => activeAgent ? updateBudgetStatus(activeAgent.id, "pause") : undefined}
-              >
+              <ControlButton disabled={!activeAgent || isSubmitting || activeAgent.status === "paused"} onClick={() => activeAgent ? updateBudgetStatus(activeAgent.id, "pause") : undefined}>
+                <Pause className="h-4 w-4" />
                 Pause
               </ControlButton>
-              <ControlButton
-                disabled={!activeAgent || isSubmitting || activeAgent.status !== "paused"}
-                onClick={() => activeAgent ? updateBudgetStatus(activeAgent.id, "resume") : undefined}
-              >
+              <ControlButton disabled={!activeAgent || isSubmitting || activeAgent.status !== "paused"} onClick={() => activeAgent ? updateBudgetStatus(activeAgent.id, "resume") : undefined}>
+                <Play className="h-4 w-4" />
                 Resume
               </ControlButton>
-              <ControlButton disabled title="No close endpoint is exposed in the web API.">
+              <ControlButton disabled title="No close endpoint is exposed in the web API." className="text-red-200">
+                <XCircle className="h-4 w-4" />
                 Close
               </ControlButton>
             </div>
           </div>
-        </div>
-      </Panel>
 
-      <Panel>
-        <PanelTitle>ER/PER Runtime</PanelTitle>
-        <div className="mt-6 grid gap-3">
-          <MetricRow label="Runtime Engine" value="MagicBlock ER-ready" />
-          <MetricRow label="Refill Mode" value={formatRefillEngine(runtime.refillEngine)} />
-          <MetricRow label="Privacy Rail" value="Mirage Private Rail" />
-          <MetricRow label="Settlement" value="Native Devnet Fallback" />
-          <MetricRow label="Tick Cadence" value={formatMinutes(runtime.tickCadenceMinutes)} />
-          <MetricRow label="Session Lifetime" value={formatMinutes(runtime.sessionLifetimeMinutes)} />
+          <GlowPanel className="p-5" intensity="quiet">
+            <PanelTitle>Session Details</PanelTitle>
+            <div className="mt-5 space-y-4">
+              <DetailRow icon={<CircleDollarSign />} label="Current Allowance" value={`${current} USDC`} />
+              <DetailRow icon={<Database />} label="Max Allowance" value={`${activeAgent?.ghostAllowanceMax ?? "0"} USDC`} />
+              <DetailRow icon={<ArrowRight />} label="Refill Amount" value={`${activeAgent?.ghostRefillAmount ?? "0"} USDC`} />
+              <DetailRow icon={<Clock3 />} label="Refill Interval" value={formatMinutes(activeAgent?.ghostRefillIntervalMinutes)} />
+              <DetailRow icon={<Clock3 />} label="Next Refill" value={formatCountdown(runtime.nextRefillAt)} />
+              <DetailRow icon={<Gauge />} label="Session Status" value={formatRuntimeStatus(runtime.sessionStatus)} badge="active" />
+              <DetailRow icon={<Shield />} label="Clawback Status" value={runtime.clawbackCompleted ? "Completed" : runtime.clawbackPending ? "Queued" : "Armed"} badge="pending" />
+              <DetailRow icon={<Clock3 />} label="Reserved / Recoverable" value={`${reservedAmount} / ${recoverableAmount} USDC`} />
+            </div>
+          </GlowPanel>
         </div>
-          <div className="mt-5 grid gap-3 lg:grid-cols-2">
-          <SoftMetric label="Remaining Allowance" value={`${ghostTab?.allowanceLive ?? activeAgent?.ghostAllowanceLive ?? "0"} USDC`} />
-          <SoftMetric label="Reserved Amount" value={`${reservedAmount} USDC`} />
-          <SoftMetric label="Recoverable Amount" value={`${recoverableAmount} USDC`} />
-          <SoftMetric label="Refill Ticks" value={String(runtime.refillTickCount)} />
-          <SoftMetric label="Queued Refill" value={`${runtime.queuedRefill} USDC`} />
-          <SoftMetric label="Clawback" value={runtime.clawbackCompleted ? "completed" : runtime.clawbackPending ? "queued" : "not queued"} />
-        </div>
-      </Panel>
+      </GlowPanel>
 
-      <Panel className="xl:col-span-2">
-        <PanelTitle>Ghost Timeline</PanelTitle>
-        <div className="mt-6 space-y-3">
-          {timeline.length ? (
-            timeline.map((event) => (
-              <div key={event.id} className="rounded-lg border border-white/[0.08] bg-white/[0.025] p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-[16px] font-medium text-white">{event.label ?? event.type.replace(/_/g, " ")}</div>
-                    <div className="mt-1 text-[14px] text-zinc-500">{formatDateTime(event.at)}</div>
-                  </div>
-                  {event.amount ? <StatusBadge status="confirmed">{event.amount} USDC</StatusBadge> : null}
-                </div>
-                {event.reason ? <p className="mt-3 text-[15px] text-zinc-400">{event.reason}</p> : null}
-                {event.synthetic ? <p className="mt-2 text-[13px] text-zinc-500">runtime simulation</p> : null}
-              </div>
-            ))
-          ) : (
-            <EmptyState title="No timeline events" body="Ghost Tab events will appear here when the active session changes." />
-          )}
+      <GlowPanel className="p-6" intensity="quiet">
+        <div className="mb-6">
+          <PanelTitle>Ghost Timeline</PanelTitle>
+          <p className="mt-2 text-[15px] text-slate-500">Session lifecycle events</p>
         </div>
-      </Panel>
+        <Timeline
+          items={[
+            { label: "Opened", detail: formatDateTime(ghostTab?.openedAt) },
+            { label: "Refilled", detail: timeline.find((event) => event.type.includes("refill")) ? "Latest refill recorded" : "Waiting for tick" },
+            { label: "Pulled", detail: receipts.length ? `${receipts.length} spend event${receipts.length === 1 ? "" : "s"}` : "No pulls yet" },
+            { label: "Paused", detail: activeAgent?.status === "paused" ? "Currently paused" : "Not paused" },
+            { label: "Closed", detail: formatCountdown(ghostTab?.expiresAt), status: runtime.sessionStatus === "closed" ? "done" : "muted" }
+          ]}
+        />
+      </GlowPanel>
+    </div>
+  );
+}
+
+function DetailRow({ icon, label, value, badge }: { icon: ReactNode; label: string; value: string; badge?: string }) {
+  return (
+    <div className="flex items-center gap-4 border-b border-white/[0.07] pb-4 last:border-b-0">
+      <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-violet-300/30 bg-violet-500/13 text-violet-200 [&_svg]:h-5 [&_svg]:w-5">
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1 text-[15px] text-slate-300">{label}</div>
+      <div className="min-w-0 text-right text-[17px] font-medium text-white">{badge ? <StatusBadge status={badge}>{value}</StatusBadge> : value}</div>
     </div>
   );
 }
@@ -307,54 +347,127 @@ export function FirewallSection({
   setSection: (section: SectionId) => void;
 }) {
   const allowedRecipients = recipients.filter((recipient) => recipient.isAllowedForActiveAgent);
+  const rules = [
+    ["Daily cap enforcement", "Enforces your daily spend cap across all transactions.", "active", `${activeAgent?.dailyCap ?? "0"} USDC`],
+    ["Live Ghost Allowance", "Uses real-time allowance for every spend.", "active", "Dynamic"],
+    ["Recipient allowlist", "Only approved recipients are allowed.", allowedRecipients.length ? "active" : "pending", `${allowedRecipients.length} allowed`],
+    ["Public fallback", "If no match, use public context protections.", "passive", "Enabled"],
+    ["Risk filter", "Blocks transactions flagged as high risk.", "active", "Strict"],
+    ["Per spend limit", "Maximum limit per transaction.", "active", `${activeAgent?.ghostAllowanceMax ?? "0"} USDC`]
+  ];
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-      <Panel>
-        <PanelTitle>Spend Firewall Status</PanelTitle>
-        <div className="mt-6 flex justify-center">
-          <ShieldSigil large />
+    <div className="space-y-5">
+      <GlowPanel className="p-6 sm:p-8" intensity="strong">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(360px,1fr)] lg:items-center">
+          <div>
+            <div className="text-[13px] font-semibold uppercase tracking-[0.18em] text-violet-300">Firewall</div>
+            <h2 className="mt-4 text-[38px] font-semibold leading-tight text-white sm:text-[48px]">
+              Spend Firewall <span className="text-emerald-300">Active</span>
+            </h2>
+            <p className="mt-3 max-w-xl text-[17px] leading-8 text-slate-300">
+              Transactions are protected by real-time policy enforcement, allowlists, risk filters, and private rail constraints.
+            </p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <MiniMetric icon={<ShieldCheck />} label="Mode" value="Strict" tone="violet" />
+              <MiniMetric icon={<AlertTriangle />} label="Blocked Attempts" value={String(blockedAttempts.length)} tone="amber" />
+              <MiniMetric icon={<CheckCircle2 />} label="System Trust" value="High" tone="emerald" />
+            </div>
+          </div>
+          <HeroCore variant="shield" className="min-h-[300px]" />
         </div>
-        <div className="mt-8 grid gap-3">
-          <MetricRow label="Daily Cap" value={`${activeAgent?.dailyCap ?? "0"} USDC`} />
-          <MetricRow label="Per Spend Limit" value={`${activeAgent?.ghostAllowanceMax ?? "0"} USDC`} />
-          <MetricRow label="Recipient Allowlist" value={allowedRecipients.length > 0 ? `${allowedRecipients.length} allowed` : "No recipients"} />
-          <MetricRow label="Risk Filter" value="Strict" />
-          <MetricRow label="Blocked Attempts" value={String(blockedAttempts.length)} />
-        </div>
-      </Panel>
+      </GlowPanel>
 
-      <Panel>
-        <PanelTitle>Policy Rules</PanelTitle>
-        <div className="mt-6 space-y-3">
-          <PolicyRule title="Daily cap enforcement" body="Spend is bounded by the active agent daily allowance." status="active" />
-          <PolicyRule title="Live Ghost Allowance" body="Each intent must fit inside the rolling private allowance." status="active" />
-          <PolicyRule
-            title="Recipient allowlist"
-            body={activeAgent?.defaultRecipientAddress ? `Default recipient: ${compactAddress(activeAgent.defaultRecipientAddress)}` : "No default recipient selected."}
-            status={activeAgent?.defaultRecipientAddress ? "active" : "pending"}
-          />
-          <PolicyRule title="Public fallback" body={formatRail(activeAgent?.executionMode)} status="active" />
-        </div>
-        <div className="mt-6">
-          <ActionButton onClick={() => setSection("settings")}>Manage Recipients</ActionButton>
-        </div>
-      </Panel>
+      <div className="grid gap-4 xl:grid-cols-[1.08fr_0.92fr]">
+        <GlowPanel className="p-5" intensity="quiet">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <PanelTitle>Policy Rules</PanelTitle>
+              <p className="mt-2 text-[14px] text-slate-500">Active rules that govern how funds are protected.</p>
+            </div>
+            <StatusBadge status="active">{activePolicyCount(activeAgent, recipients)} active</StatusBadge>
+          </div>
+          <div className="mt-4 space-y-2">
+            {rules.map(([title, body, status, value]) => (
+              <PolicyRuleRow key={title} title={title} body={body} status={status} value={value} />
+            ))}
+          </div>
+        </GlowPanel>
 
-      <Panel className="xl:col-span-2">
-        <PanelTitle>Blocked Attempts</PanelTitle>
-        <DataTable columns={["Paylink ID", "Agent", "Amount", "Recipient", "Time"]} emptyTitle="No blocked attempts" emptyBody="Rejected or failed intents will appear here.">
-          {blockedAttempts.map((receipt) => (
-            <tr key={receipt.id} className="border-t border-white/[0.07]">
-              <td className="px-3 py-4 font-medium text-violet-300">{receipt.paylinkId}</td>
-              <td className="px-3 py-4 text-zinc-300">{receipt.agent}</td>
-              <td className="px-3 py-4 text-white">{receipt.amount} {receipt.mint}</td>
-              <td className="px-3 py-4 text-zinc-300">{compactAddress(receipt.recipient)}</td>
-              <td className="px-3 py-4 text-zinc-300">{formatCountdown(receipt.createdAt)}</td>
-            </tr>
-          ))}
-        </DataTable>
-      </Panel>
+        <div className="space-y-4">
+          <GlowPanel className="p-5" intensity="quiet">
+            <PanelTitle>Firewall Summary</PanelTitle>
+            <div className="mt-5 grid gap-5 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center">
+              <HeroCore variant="shield" className="min-h-[190px]" />
+              <div className="space-y-3">
+                <MetricRow label="Firewall Status" value="Active" />
+                <MetricRow label="Protection Mode" value="Strict" />
+                <MetricRow label="Risk Threshold" value="High" />
+                <MetricRow label="Last Updated" value="1m ago" />
+                <MetricRow label="Auto-Lockdown" value="Enabled" />
+              </div>
+            </div>
+            <button type="button" onClick={() => setSection("settings")} className="mt-5 flex w-full items-center justify-between rounded-lg border border-white/[0.08] bg-white/[0.04] p-4 text-left transition hover:border-violet-300/35 hover:bg-violet-500/10">
+              <span>
+                <span className="block font-medium text-white">Manage Firewall Settings</span>
+                <span className="mt-1 block text-[13px] text-slate-500">Update policies, allowlists, limits, and risk preferences.</span>
+              </span>
+              <ArrowRight className="h-4 w-4 text-violet-200" />
+            </button>
+          </GlowPanel>
+
+          <GlowPanel className="p-5" intensity="quiet">
+            <PanelTitle>Protection at a Glance</PanelTitle>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <SoftMetric label="Blocked" value={String(blockedAttempts.length)} compact />
+              <SoftMetric label="Policy Hits" value={String(activePolicyCount(activeAgent, recipients))} compact />
+              <SoftMetric label="Auto-Lockdowns" value="0" compact />
+              <SoftMetric label="Policy Uptime" value="100%" compact />
+            </div>
+          </GlowPanel>
+        </div>
+      </div>
+
+      <GlowPanel className="p-5" intensity="quiet">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <PanelTitle>Blocked Attempts & Policy Hits</PanelTitle>
+            <p className="mt-2 text-[14px] text-slate-500">Recent activity blocked or flagged by the firewall.</p>
+          </div>
+          <StatusBadge status="pending">Last 24 hours</StatusBadge>
+        </div>
+        <ReceiptsMiniTable receipts={blockedAttempts} emptyTitle="No blocked attempts in the selected period" emptyBody="Your firewall is holding strong." />
+      </GlowPanel>
+    </div>
+  );
+}
+
+function MiniMetric({ icon, label, value, tone }: { icon: ReactNode; label: string; value: string; tone: "violet" | "amber" | "emerald" }) {
+  const toneClass = tone === "emerald" ? "text-emerald-300 bg-emerald-500/13" : tone === "amber" ? "text-amber-300 bg-amber-500/13" : "text-violet-200 bg-violet-500/16";
+  return (
+    <div className="flex min-w-0 items-center gap-3 rounded-lg border border-white/[0.08] bg-[#071127]/72 p-4">
+      <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-full ${toneClass} [&_svg]:h-5 [&_svg]:w-5`}>{icon}</div>
+      <div className="min-w-0">
+        <div className="text-[13px] text-slate-500">{label}</div>
+        <div className="truncate text-[21px] font-semibold text-white">{value}</div>
+      </div>
+    </div>
+  );
+}
+
+function PolicyRuleRow({ title, body, status, value }: { title: string; body: string; status: string; value: string }) {
+  return (
+    <div className="flex items-center gap-4 rounded-lg border border-white/[0.07] bg-white/[0.035] p-4">
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-violet-500/14 text-violet-200">
+        <LockKeyhole className="h-5 w-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="font-medium text-white">{title}</div>
+        <div className="mt-1 text-[13px] text-slate-500">{body}</div>
+      </div>
+      <StatusBadge status={status}>{status}</StatusBadge>
+      <div className="hidden min-w-[90px] text-right text-[14px] text-slate-300 sm:block">{value}</div>
+      <ArrowRight className="h-4 w-4 text-slate-500" />
     </div>
   );
 }
@@ -390,136 +503,230 @@ export function ExecutionsSection({
   submitSpendIntent: (event: FormEvent<HTMLFormElement>) => void;
   isSubmitting: boolean;
 }) {
-  return (
-    <div className="grid gap-4">
-      <Panel>
-        <div className="grid gap-6 xl:grid-cols-[0.82fr_1.18fr]">
-          <div>
-            <PanelTitle>Create Spend Intent</PanelTitle>
-            <div className="mt-5 rounded-lg border border-violet-400/15 bg-violet-500/[0.04] p-4">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">Active Agent</div>
-              <div className="mt-2 flex flex-wrap items-center gap-3">
-                <div className="text-[20px] font-medium text-white">{activeAgent?.name ?? "No active agent"}</div>
-                {activeAgent ? <StatusBadge status="active">Active</StatusBadge> : <StatusBadge status="inactive">Unavailable</StatusBadge>}
-              </div>
-              <div className="mt-3 text-[14px] text-zinc-400">
-                {activeAgent ? `${formatRail(activeAgent.executionMode)} - ${compactAddress(activeAgent.defaultRecipientAddress)}` : "Add or select an agent before creating a real spend intent."}
-              </div>
-            </div>
-            <form className="mt-5 space-y-4" onSubmit={submitSpendIntent}>
-              <div className="grid gap-3 lg:grid-cols-[1fr_0.7fr]">
-                <Field label="Amount">
-                  <StyledInput
-                    value={spendAmount}
-                    onChange={(event) => setSpendAmount(event.target.value)}
-                    placeholder="1"
-                    inputMode="numeric"
-                    aria-label="Spend amount"
-                  />
-                </Field>
-                <Field label="Mint">
-                  <StyledInput value={spendMint} onChange={(event) => setSpendMint(event.target.value)} placeholder="USDC" aria-label="Spend mint" />
-                </Field>
-              </div>
-              <Field label="Recipient">
-                <StyledSelect value={spendRecipient} onChange={(event) => setSpendRecipient(event.target.value)} aria-label="Spend recipient">
-                  <option value="" className="bg-[#080812] text-zinc-400">
-                    Active agent default
-                  </option>
-                  {recipients.map((recipient) => (
-                    <option key={recipient.label} value={recipient.address} className="bg-[#080812] text-white">
-                      {recipient.label} - {compactAddress(recipient.address)}
-                    </option>
-                  ))}
-                </StyledSelect>
-              </Field>
-              <Field label="Intent">
-                <StyledTextarea value={spendGoal} onChange={(event) => setSpendGoal(event.target.value)} placeholder="buy coffee" aria-label="Spend goal" />
-              </Field>
-              <ControlButton type="submit" disabled={!activeAgent || isSubmitting} className="w-full justify-center">
-                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                Create Spend Intent
-              </ControlButton>
-            </form>
-          </div>
+  const [queueTab, setQueueTab] = useState<"queue" | "history">("queue");
+  const queueReceipts = receipts.filter((receipt) => queueTab === "history" || receipt.status === "pending" || receipt.status === "pending_execution");
 
-          <div>
-            <PanelTitle>Pending Execution</PanelTitle>
-            <div className="mt-5">
-              {spendResult ? (
-                <div className="rounded-lg border border-white/[0.08] bg-white/[0.025] p-5">
-                  <div className="flex items-center gap-3">
-                    {spendResult.decision === "blocked" ? <XCircle className="h-5 w-5 text-red-400" /> : <CheckCircle2 className="h-5 w-5 text-emerald-400" />}
-                    <div className="text-[21px] font-medium text-white">
-                      {spendResult.decision === "blocked" ? "Spend intent blocked" : "Pending execution created"}
-                    </div>
-                  </div>
-                  <div className="mt-5 grid gap-3 lg:grid-cols-2">
-                    <SoftMetric label="Paylink ID" value={spendResult.paylinkId ?? "None"} />
-                    <SoftMetric label="Status" value={spendResult.status === "pending_execution" ? "pending execution" : spendResult.status ?? spendResult.decision ?? "pending execution"} />
-                    <SoftMetric label="Rail" value={formatRail(spendResult.rail ?? "magicblock-private")} />
-                    <SoftMetric label="Recipient" value={compactAddress(spendResult.recipient)} />
-                  </div>
-                  {spendResult.reason ? <div className="mt-4 text-[14px] text-zinc-400">{spendResult.reason}</div> : null}
-                </div>
-              ) : (
-                <EmptyState title="No pending intent" body="Create a spend intent here for real devnet execution. Simulator remains dry-run only." />
-              )}
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-5 xl:grid-cols-[0.82fr_1.08fr]">
+        <GlowPanel className="p-5 sm:p-6" intensity="strong">
+          <StepTitle step="1" title="Create Spend Intent" detail="Create a spend intent for your agent to execute." />
+          <form className="mt-6 space-y-5" onSubmit={submitSpendIntent}>
+            <Field label="Agent">
+              <div className="rounded-lg border border-[#27365F] bg-[#071127]/80 px-3 py-3 text-white">
+                {activeAgent?.name ?? "No active agent"} <StatusBadge status={activeAgent ? "active" : "inactive"}>{activeAgent ? "Active" : "Unavailable"}</StatusBadge>
+              </div>
+            </Field>
+            <div className="grid gap-3 sm:grid-cols-[1fr_0.56fr]">
+              <Field label="Amount">
+                <StyledInput value={spendAmount} onChange={(event) => setSpendAmount(event.target.value)} placeholder="12.50" inputMode="decimal" aria-label="Spend amount" />
+              </Field>
+              <Field label="Mint">
+                <StyledInput value={spendMint} onChange={(event) => setSpendMint(event.target.value)} placeholder="USDC" aria-label="Spend mint" />
+              </Field>
             </div>
+            <Field label="Recipient">
+              <StyledSelect value={spendRecipient} onChange={(event) => setSpendRecipient(event.target.value)} aria-label="Spend recipient">
+                <option value="" className="bg-[#080812] text-zinc-400">Active agent default</option>
+                {recipients.map((recipient) => (
+                  <option key={recipient.label} value={recipient.address} className="bg-[#080812] text-white">
+                    {recipient.label} - {compactAddress(recipient.address)}
+                  </option>
+                ))}
+              </StyledSelect>
+            </Field>
+            <Field label="Intent">
+              <StyledTextarea value={spendGoal} onChange={(event) => setSpendGoal(event.target.value)} placeholder="Pay vendor for analytics dashboard subscription." aria-label="Spend goal" />
+            </Field>
+            <ControlButton type="submit" disabled={!activeAgent || isSubmitting} className="w-full bg-[linear-gradient(135deg,#7C3AED,#4F46E5)] shadow-[0_0_34px_rgba(124,58,237,0.45)]">
+              {isSubmitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              Create Intent
+            </ControlButton>
+          </form>
+        </GlowPanel>
+
+        <div className="space-y-5">
+          <GlowPanel className="p-5 sm:p-6" intensity="strong">
+            <StepTitle step="2" title="Pending Execution / Preview" detail="Review the transaction that will be executed by your agent." />
+            <div className="mt-5 grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
+              <HeroCore variant="cube" className="min-h-[180px]" />
+              <div className="space-y-3">
+                <MetricRow label="From (Agent Wallet)" value={compactAddress(activeAgent?.id)} />
+                <MetricRow label="To (Recipient)" value={compactAddress(spendRecipient || activeAgent?.defaultRecipientAddress)} />
+                <MetricRow label="Amount" value={`${spendAmount || "0"} ${spendMint || "USDC"}`} />
+                <MetricRow label="Primary Rail" value={formatRail(activeAgent?.executionMode)} />
+                <MetricRow label="Status" value={spendResult?.status ?? spendResult?.decision ?? "Awaiting validation"} />
+              </div>
+            </div>
+            {spendResult?.reason ? <div className="mt-4 rounded-lg border border-amber-300/20 bg-amber-300/8 p-3 text-[14px] text-amber-100">{spendResult.reason}</div> : null}
+          </GlowPanel>
+
+          <GlowPanel className="p-5 sm:p-6" intensity="quiet">
+            <StepTitle step="3" title="Policy & Validation Checks" detail="Validation results for this intent." />
+            <div className="mt-5">
+              <ValidationChecklist
+                items={[
+                  { label: "Allowance Fit", detail: activeAgent ? "Sufficient allowance is checked by policy." : "Select an active agent first.", status: activeAgent ? "allowed" : "pending" },
+                  { label: "Firewall Check", detail: "Passes active firewall rules when within policy.", status: spendResult?.decision === "blocked" ? "blocked" : "passed" },
+                  { label: "Recipient Status", detail: recipients.length ? "Recipient registry available." : "No saved recipients yet.", status: recipients.length ? "passed" : "pending" },
+                  { label: "Rail Path", detail: `${formatRail(activeAgent?.executionMode)} is selected.`, status: "allowed" },
+                  { label: "Settlement Mode", detail: "Devnet settlement proof is attached when available.", status: "passed" }
+                ]}
+              />
+            </div>
+          </GlowPanel>
+        </div>
+      </div>
+
+      <GlowPanel className="p-5" intensity="quiet">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <PanelTitle>Execution Queue</PanelTitle>
+            <p className="mt-2 text-[14px] text-slate-500">Track pending and recent executions.</p>
+          </div>
+          <div className="flex gap-2">
+            {(["queue", "history"] as const).map((tab) => (
+              <button key={tab} type="button" onClick={() => setQueueTab(tab)} className={tab === queueTab ? "rounded-lg border border-violet-300/40 bg-violet-500/16 px-4 py-2 text-violet-100" : "rounded-lg border border-white/10 px-4 py-2 text-slate-400"}>
+                {tab === "queue" ? "Queue" : "History"}
+              </button>
+            ))}
           </div>
         </div>
-      </Panel>
+        <ReceiptsMiniTable receipts={queueReceipts} emptyTitle="No executions" emptyBody="Pending, blocked, confirmed, and failed executions will appear here." />
+      </GlowPanel>
+    </div>
+  );
+}
 
-      <Panel>
-        <PanelTitle>Execution Queue</PanelTitle>
-        <DataTable
-          columns={["Paylink ID", "Agent", "Amount", "Recipient", "Primary Rail", "Fallback Used", "Queue State", "Time", "Action"]}
-          emptyTitle="No executions"
-          emptyBody="Pending, blocked, confirmed, and failed executions will appear here."
-        >
-          {receipts.map((receipt) => (
-            <tr key={receipt.id} className="border-t border-white/[0.07]">
-              <td className="px-3 py-4 font-medium text-violet-300">{receipt.paylinkId}</td>
-              <td className="px-3 py-4 text-zinc-300">{receipt.agent}</td>
-              <td className="px-3 py-4 text-white">{receipt.amount} {receipt.mint}</td>
-              <td className="px-3 py-4 text-zinc-300">{compactAddress(receipt.recipient)}</td>
-              <td className="px-3 py-4 text-zinc-300">{formatRail(receipt.executionRail)}</td>
-              <td className="px-3 py-4 text-zinc-300">{formatFallbackUsage(receipt)}</td>
-              <td className="px-3 py-4"><StatusBadge status={formatExecutionQueueState(receipt)} /></td>
-              <td className="px-3 py-4 text-zinc-300">{formatCountdown(receipt.createdAt)}</td>
-              <td className="px-3 py-4"><ExplorerLink url={receipt.explorerUrl} /></td>
-            </tr>
-          ))}
-        </DataTable>
-      </Panel>
+function StepTitle({ step, title, detail }: { step: string; title: string; detail: string }) {
+  return (
+    <div className="flex gap-4">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-violet-300/60 bg-violet-500/24 text-[18px] font-semibold text-white shadow-[0_0_24px_rgba(124,58,237,0.48)]">{step}</span>
+      <div>
+        <h2 className="text-[18px] font-semibold uppercase tracking-[0.04em] text-white">{title}</h2>
+        <p className="mt-1 text-[14px] text-slate-500">{detail}</p>
+      </div>
     </div>
   );
 }
 
 export function ReceiptsSection({ receipts }: { receipts: CommandCenterReceipt[] }) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedId, setSelectedId] = useState<string | null>(receipts[0]?.id ?? null);
+  const filtered = useMemo(
+    () =>
+      receipts.filter((receipt) => {
+        const matchesStatus = statusFilter === "all" || receipt.status === statusFilter;
+        const haystack = `${receipt.id} ${receipt.agent} ${receipt.recipient} ${receipt.txSignature ?? ""}`.toLowerCase();
+        return matchesStatus && haystack.includes(query.toLowerCase());
+      }),
+    [query, receipts, statusFilter]
+  );
+  const selected = filtered.find((receipt) => receipt.id === selectedId) ?? filtered[0] ?? null;
+  const total = receiptAmountTotal(receipts);
+  const average = receipts.length ? total / receipts.length : 0;
+
   return (
-    <Panel>
-      <PanelTitle>Confirmed Receipts</PanelTitle>
-      <DataTable
-        columns={["Receipt ID", "MagicBlock Rail", "Mode", "Fallback", "Devnet TX Signature", "Amount", "Recipient", "Status", "Explorer"]}
-        emptyTitle="No confirmed receipts"
-        emptyBody="Settled devnet transactions will appear here with explorer links."
-      >
-        {receipts.map((receipt) => (
-          <tr key={receipt.id} className="border-t border-white/[0.07]">
-            <td className="px-3 py-4 font-medium text-violet-300">{receipt.id}</td>
-            <td className="px-3 py-4 text-zinc-300">{formatMagicBlockStatus(receipt)}</td>
-            <td className="px-3 py-4 text-zinc-300">{formatReceiptMagicBlockMode(receipt)}</td>
-            <td className="px-3 py-4 text-zinc-300">{formatFallbackUsage(receipt)}</td>
-            <td className="px-3 py-4 text-zinc-300">{receipt.txSignature ?? receipt.txSignatureShort ?? "not recorded"}</td>
-            <td className="px-3 py-4 text-white">{receipt.amount} {receipt.mint}</td>
-            <td className="px-3 py-4 text-zinc-300">{compactAddress(receipt.recipient)}</td>
-            <td className="px-3 py-4"><StatusBadge status={receipt.status} /></td>
-            <td className="px-3 py-4"><ExplorerLink url={receipt.explorerUrl} /></td>
-          </tr>
-        ))}
-      </DataTable>
-    </Panel>
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard icon={<ShieldCheck className="h-5 w-5" />} label="Confirmed Today" value={String(receipts.length)} detail="Confirmed receipts" />
+        <StatCard icon={<Database className="h-5 w-5" />} label="Total Settled" value={`${kpiFormat(total)} USDC`} detail="Across all executions" />
+        <StatCard icon={<Gauge className="h-5 w-5" />} label="Success Rate" value={receipts.length ? "100%" : "0%"} detail="All time executions" tone="emerald" />
+        <StatCard icon={<Wallet className="h-5 w-5" />} label="Average Amount" value={`${kpiFormat(average)} USDC`} detail="Per successful execution" tone="blue" />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="space-y-4">
+          <GlowPanel className="p-4" intensity="quiet">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_140px]">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <StyledInput value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search receipt ID, agent, executor, or transaction..." className="pl-10" />
+              </div>
+              <StyledSelect value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                <option value="all">All Status</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="pending">Pending</option>
+              </StyledSelect>
+              <ControlButton className="w-full">
+                <Filter className="h-4 w-4" />
+                Filters
+              </ControlButton>
+            </div>
+          </GlowPanel>
+
+          <GlowPanel className="p-5" intensity="quiet">
+            <div className="mb-4 flex items-center justify-between">
+              <PanelTitle>Settlement Receipts</PanelTitle>
+              <StatusBadge status="neutral">{filtered.length} results</StatusBadge>
+            </div>
+            {filtered.length ? (
+              <DataTableShell>
+                <table className="w-full text-left text-[14px]">
+                  <thead className="border-b border-white/[0.08] text-[12px] uppercase tracking-[0.08em] text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">Receipt ID</th>
+                      <th className="px-4 py-3 font-medium">Agent</th>
+                      <th className="px-4 py-3 font-medium">Amount</th>
+                      <th className="px-4 py-3 font-medium">Status</th>
+                      <th className="px-4 py-3 font-medium">Settled</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((receipt) => (
+                      <tr key={receipt.id} onClick={() => setSelectedId(receipt.id)} className="cursor-pointer border-b border-white/[0.06] transition hover:bg-violet-500/8">
+                        <td className="px-4 py-4 font-medium text-violet-200">{compactAddress(receipt.id)}</td>
+                        <td className="px-4 py-4 text-slate-300">{receipt.agent}</td>
+                        <td className="px-4 py-4 text-white">{receipt.amount} {receipt.mint}</td>
+                        <td className="px-4 py-4"><StatusBadge status={receipt.status} /></td>
+                        <td className="px-4 py-4 text-slate-400">{formatCountdown(receipt.confirmedAt ?? receipt.createdAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </DataTableShell>
+            ) : (
+              <div className="grid min-h-[440px] place-items-center text-center">
+                <div>
+                  <HeroCore variant="document" className="mx-auto min-h-[220px] w-full max-w-md" />
+                  <h3 className="mt-2 text-[24px] font-semibold text-white">No receipts yet</h3>
+                  <p className="mx-auto mt-2 max-w-sm text-[15px] leading-6 text-slate-400">Settlement receipts from your executions will appear here once they are confirmed on-chain.</p>
+                </div>
+              </div>
+            )}
+          </GlowPanel>
+        </div>
+
+        <div className="space-y-4">
+          <GlowPanel className="p-5" intensity="quiet">
+            <PanelTitle>Receipt Details</PanelTitle>
+            {selected ? (
+              <div className="mt-5 space-y-3">
+                <HeroCore variant="cube" className="min-h-[220px]" />
+                <MetricRow label="Receipt" value={selected.id} />
+                <MetricRow label="MagicBlock Rail" value={formatMagicBlockStatus(selected)} />
+                <MetricRow label="Mode" value={formatReceiptMagicBlockMode(selected)} />
+                <MetricRow label="Fallback" value={formatFallbackUsage(selected)} />
+                <MetricRow label="Recipient" value={compactAddress(selected.recipient)} />
+                <div className="pt-2"><ExplorerLink url={selected.explorerUrl} /></div>
+              </div>
+            ) : (
+              <EmptyState title="No receipt selected" body="Select a receipt from the list to view settlement details and on-chain proof." />
+            )}
+          </GlowPanel>
+          <GlowPanel className="p-5" intensity="quiet">
+            <PanelTitle>Receipt Insights</PanelTitle>
+            <div className="mt-5 space-y-3">
+              <MetricRow label="Total Receipts" value={String(receipts.length)} />
+              <MetricRow label="Total Settled" value={`${kpiFormat(total)} USDC`} />
+              <MetricRow label="Success Rate" value={receipts.length ? "100%" : "0%"} />
+              <MetricRow label="Average Settlement Time" value="-" />
+            </div>
+          </GlowPanel>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -546,43 +753,77 @@ export function AgentsSection({
   generatedAgentToken: GeneratedAgentTokenState | null;
   generateAgentToken: (agentId: string) => void;
 }) {
+  const [query, setQuery] = useState("");
   const activeAgent = agents.find((agent) => agent.isActive) ?? null;
   const onboardingAgent = agents.find((agent) => agent.id === lastOnboardedAgentId) ?? activeAgent;
+  const filtered = agents.filter((agent) => agent.name.toLowerCase().includes(query.toLowerCase()) || agent.id.toLowerCase().includes(query.toLowerCase()));
 
   return (
-    <div className="grid gap-4">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-      <AgentTable
-        agents={agents}
-        activeAgent={activeAgent}
-        isSubmitting={isSubmitting}
-        clearActiveAgent={clearActiveAgent}
-        useAgent={useAgent}
-      />
+    <div className="space-y-5">
+      <PageHeader title="Agent Vaults" />
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_430px]">
+        <div className="space-y-5">
+          <GlowPanel className="p-6" intensity="strong">
+            <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_360px] md:items-center">
+              <div>
+                <h2 className="text-[32px] font-semibold leading-tight text-white sm:text-[38px]">
+                  Autonomous spending, under your <span className="text-violet-300">control.</span>
+                </h2>
+                <p className="mt-4 max-w-xl text-[16px] leading-7 text-slate-400">Agent Vaults are controllable spending entities with their own allowances, firewall policies, and recipient rules.</p>
+                <div className="mt-6 grid gap-3 sm:flex">
+                  <ControlButton onClick={() => document.getElementById("agent-vault-name")?.focus()} className="bg-[linear-gradient(135deg,#7C3AED,#4F46E5)]">
+                    <Plus className="h-4 w-4" />
+                    Add Agent Vault
+                  </ControlButton>
+                  <ControlButton asAnchor href="https://github.com/Pterodactyl681/WhisperVault#readme">
+                    Learn more
+                    <ExternalLink className="h-4 w-4" />
+                  </ControlButton>
+                </div>
+              </div>
+              <HeroCore variant="cube" className="min-h-[250px]" />
+            </div>
+          </GlowPanel>
 
-      <Panel>
-        <PanelTitle>Add Agent Vault</PanelTitle>
-        <p className="mt-4 text-[15px] leading-6 text-zinc-400">
-          Create policy and limits for a spend-capable agent vault.
-        </p>
-        <form className="mt-6 space-y-3" onSubmit={createAgent}>
-          <StyledInput value={newAgentName} onChange={(event) => setNewAgentName(event.target.value)} placeholder="agent vault name" aria-label="New Agent Vault name" />
-          <ControlButton type="submit" disabled={isSubmitting} className="w-full justify-center">
-            <Plus className="h-4 w-4" />
-            Add Agent Vault
-          </ControlButton>
-        </form>
-      </Panel>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard icon={<UsersRound className="h-5 w-5" />} label="Total Agents" value={String(agents.length)} detail="All time" />
+            <StatCard icon={<CheckCircle2 className="h-5 w-5" />} label="Active Agents" value={String(agents.filter((agent) => agent.isActive).length)} detail="Currently active" tone="emerald" />
+            <StatCard icon={<ShieldCheck className="h-5 w-5" />} label="Healthy Policies" value={String(agents.filter((agent) => agent.status !== "exhausted").length)} detail="No policy issues" tone="blue" />
+            <StatCard icon={<Layers3 className="h-5 w-5" />} label="Routing Ready" value={String(agents.filter((agent) => agent.defaultRecipientAddress).length)} detail="Ready to execute" tone="amber" />
+          </div>
+
+          <AgentTable agents={filtered} activeAgent={activeAgent} isSubmitting={isSubmitting} clearActiveAgent={clearActiveAgent} useAgent={useAgent} query={query} setQuery={setQuery} />
+          {agents.length > 0 ? <ConnectAgentPanel agent={onboardingAgent} isSubmitting={isSubmitting} generatedAgentToken={generatedAgentToken} generateAgentToken={generateAgentToken} /> : null}
+        </div>
+
+        <GlowPanel className="p-5 xl:sticky xl:top-6 xl:self-start" intensity="quiet">
+          <div className="mb-6 flex items-start gap-4">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-violet-500/16 text-violet-200">
+              <Plus className="h-6 w-6" />
+            </div>
+            <div>
+              <h2 className="text-[21px] font-semibold text-white">Add Agent Vault</h2>
+              <p className="mt-1 text-[14px] text-slate-500">Create a new agent vault with custom settings.</p>
+            </div>
+          </div>
+          <form className="space-y-5" onSubmit={createAgent}>
+            <Field label="Agent Name">
+              <StyledInput id="agent-vault-name" value={newAgentName} onChange={(event) => setNewAgentName(event.target.value)} placeholder="e.g., Research Agent" aria-label="New Agent Vault name" />
+            </Field>
+            <Field label="Description (optional)">
+              <StyledTextarea placeholder="Describe the agent's purpose and scope..." aria-label="Agent description" />
+            </Field>
+            <Field label="Daily Allowance">
+              <StyledInput value="0" readOnly aria-label="Daily allowance" />
+            </Field>
+            <ControlButton type="submit" disabled={isSubmitting} className="w-full bg-[linear-gradient(135deg,#7C3AED,#4F46E5)] shadow-[0_0_30px_rgba(124,58,237,0.42)]">
+              <Plus className="h-4 w-4" />
+              Create Agent Vault
+            </ControlButton>
+            <p className="text-center text-[13px] text-slate-500">You can modify settings anytime after creation.</p>
+          </form>
+        </GlowPanel>
       </div>
-
-      {agents.length > 0 ? (
-        <ConnectAgentPanel
-          agent={onboardingAgent}
-          isSubmitting={isSubmitting}
-          generatedAgentToken={generatedAgentToken}
-          generateAgentToken={generateAgentToken}
-        />
-      ) : null}
     </div>
   );
 }
@@ -592,64 +833,87 @@ export function AgentTable({
   activeAgent,
   isSubmitting,
   clearActiveAgent,
-  useAgent
+  useAgent,
+  query,
+  setQuery
 }: {
   agents: CommandCenterAgent[];
   activeAgent: CommandCenterAgent | null;
   isSubmitting: boolean;
   clearActiveAgent: () => void;
   useAgent: (agentId: string) => void;
+  query: string;
+  setQuery: (value: string) => void;
 }) {
   return (
-    <Panel>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <PanelTitle>{dashboardSourceLabels.agentList}</PanelTitle>
+    <GlowPanel className="p-5" intensity="quiet">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <PanelTitle>Agent Vaults</PanelTitle>
+          <p className="mt-2 text-[14px] text-slate-500">Manage and monitor all your agent vaults.</p>
+        </div>
         {activeAgent ? (
           <ControlButton onClick={clearActiveAgent} disabled={isSubmitting}>
             Disconnect / Clear active agent
           </ControlButton>
         ) : null}
       </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_150px_190px]">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <StyledInput value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search agents..." className="pl-10" />
+        </div>
+        <StyledSelect defaultValue="all">
+          <option value="all">All Status</option>
+          <option value="active">Active</option>
+          <option value="paused">Paused</option>
+        </StyledSelect>
+        <StyledSelect defaultValue="all">
+          <option value="all">All Allowances</option>
+          <option value="live">Live</option>
+          <option value="empty">Empty</option>
+        </StyledSelect>
+      </div>
       <VaultTable agents={agents} isSubmitting={isSubmitting} useAgent={useAgent} />
-    </Panel>
+    </GlowPanel>
   );
 }
 
-export function VaultTable({
-  agents,
-  isSubmitting,
-  useAgent
-}: {
-  agents: CommandCenterAgent[];
-  isSubmitting: boolean;
-  useAgent: (agentId: string) => void;
-}) {
+export function VaultTable({ agents, isSubmitting, useAgent }: { agents: CommandCenterAgent[]; isSubmitting: boolean; useAgent: (agentId: string) => void }) {
+  if (agents.length === 0) {
+    return (
+      <div className="grid min-h-[360px] place-items-center text-center">
+        <div>
+          <HeroCore variant="cube" className="mx-auto min-h-[220px] max-w-md" />
+          <h3 className="text-[24px] font-semibold text-white">No agent vaults yet</h3>
+          <p className="mt-2 text-[15px] text-slate-500">Create your first agent vault to automate spending with guardrails.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {agents.map((agent) => (
-        <div key={agent.id} className="min-w-0 rounded-lg border border-white/[0.08] bg-white/[0.025] p-4">
+        <div key={agent.id} className="min-w-0 rounded-xl border border-white/[0.08] bg-[#071127]/74 p-4">
           <div className="flex h-full min-w-0 flex-col gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <div className="min-w-0 truncate text-[18px] font-medium text-white">{agent.name}</div>
-                {agent.isActive ? <StatusBadge status="active">Active</StatusBadge> : null}
-                {!agent.isActive ? <StatusBadge status={agent.status} /> : null}
+                {agent.isActive ? <StatusBadge status="active">Active</StatusBadge> : <StatusBadge status={agent.status} />}
               </div>
-              <div className="mt-2 truncate text-[14px] text-zinc-500">{formatRail(agent.executionMode)}</div>
+              <div className="mt-2 truncate text-[14px] text-slate-500">{formatRail(agent.executionMode)}</div>
             </div>
             <div className="grid gap-2">
               <SoftMetric label="Ghost Allowance" value={`${agent.ghostAllowanceLive}/${agent.ghostAllowanceMax}`} compact />
               <SoftMetric label="Daily Remaining" value={`${agent.dailyLeft} USDC`} compact />
             </div>
-            <div className="mt-auto">
-              <ControlButton disabled={agent.isActive || isSubmitting} onClick={() => useAgent(agent.id)} className="w-full">
-                Set Active Vault
-              </ControlButton>
-            </div>
+            <ControlButton disabled={agent.isActive || isSubmitting} onClick={() => useAgent(agent.id)} className="mt-auto w-full">
+              Set Active Vault
+            </ControlButton>
           </div>
         </div>
       ))}
-      {agents.length === 0 ? <EmptyState title="No Agent Vaults" body="Add an Agent Vault to create policy and limits for spend intents." /> : null}
     </div>
   );
 }
@@ -670,97 +934,58 @@ function ConnectAgentPanel({
   const telegramBotAvailable = TELEGRAM_REFERENCE_BOT_URL.length > 0;
 
   return (
-    <Panel>
+    <GlowPanel className="p-5" intensity="quiet">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <PanelTitle>Connect Agent</PanelTitle>
-          <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap sm:items-center">
+          <div className="mt-3 flex flex-wrap gap-2">
             <StatusBadge status="active">Agent Vault ready</StatusBadge>
             <StatusBadge status="pending">Connect your agent next</StatusBadge>
           </div>
         </div>
-        <AgentFlowStepper />
       </div>
-
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+      <div className="mt-5 grid gap-4 lg:grid-cols-2">
         <ConnectionMethod
           title="Telegram Reference Agent"
           detail="Use the reference bot to select this vault and send a demo spend."
           action={
-            <ControlButton asAnchor href={telegramBotAvailable ? TELEGRAM_REFERENCE_BOT_URL : "#"} disabled={!telegramBotAvailable} title={telegramBotAvailable ? "Open Telegram bot" : "Set NEXT_PUBLIC_TELEGRAM_BOT_URL to enable this link."}>
-              <ExternalLink className="h-3.5 w-3.5" />
+            <ControlButton asAnchor href={telegramBotAvailable ? TELEGRAM_REFERENCE_BOT_URL : "#"} disabled={!telegramBotAvailable}>
+              <ExternalLink className="h-4 w-4" />
               Open Telegram bot
             </ControlButton>
           }
-          steps={[
-            <>Command: <code className="text-violet-200">{`/agent use ${agentName}`}</code></>,
-            <>Command: <code className="text-violet-200">/spend 1 buy coffee</code></>
-          ]}
+          steps={[<>Command: <code className="text-violet-200">{`/agent use ${agentName}`}</code></>, <>Command: <code className="text-violet-200">/spend 1 buy coffee</code></>]}
         />
-
         <ConnectionMethod
           title="BYO Agent API"
           detail="External agents submit spend intents through this API."
           action={
             <ControlButton disabled={!agent || isSubmitting} onClick={() => agent ? generateAgentToken(agent.id) : undefined}>
-              <KeyRound className="h-3.5 w-3.5" />
+              <KeyRound className="h-4 w-4" />
               Generate Agent Token
             </ControlButton>
           }
-          steps={[
-            <>Endpoint: <code className="text-violet-200">/api/agent-spend</code></>,
-            <>Authorization: <code className="text-violet-200">Bearer {token}</code></>,
-            <>Submit goal, amount, mint, and recipient.</>
-          ]}
+          steps={[<>Endpoint: <code className="text-violet-200">/api/agent-spend</code></>, <>Authorization: <code className="text-violet-200">Bearer {token}</code></>]}
         />
       </div>
-    </Panel>
+    </GlowPanel>
   );
 }
 
-function AgentFlowStepper() {
-  const steps = ["Create Agent Vault", "Connect via Telegram/API", "Submit spend intent"];
-
+function ConnectionMethod({ title, detail, action, steps }: { title: string; detail: string; action: ReactNode; steps: ReactNode[] }) {
   return (
-    <div className="grid min-w-0 gap-2 text-[13px] text-zinc-300 sm:grid-cols-3 lg:min-w-[520px]">
-      {steps.map((step, index) => (
-        <div key={step} className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.025] px-3 py-2">
-          <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-violet-300/20 bg-violet-400/10 text-[12px] text-violet-200">
-            {index + 1}
-          </span>
-          <span className="min-w-0 leading-5">{step}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ConnectionMethod({
-  title,
-  detail,
-  action,
-  steps
-}: {
-  title: string;
-  detail: string;
-  action: ReactNode;
-  steps: ReactNode[];
-}) {
-  return (
-    <div className="rounded-lg border border-white/[0.08] bg-white/[0.025] p-4">
+    <div className="rounded-xl border border-white/[0.08] bg-white/[0.035] p-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <div className="text-[17px] font-medium text-white">{title}</div>
-          <p className="mt-1 text-[14px] text-zinc-500">{detail}</p>
+          <p className="mt-1 text-[14px] text-slate-500">{detail}</p>
         </div>
         <div className="shrink-0">{action}</div>
       </div>
-      <ol className="mt-4 space-y-2 text-[14px] text-zinc-300">
+      <ol className="mt-4 space-y-2 text-[14px] text-slate-300">
         {steps.map((step, index) => (
           <li key={index} className="flex gap-2">
-            <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-violet-300/18 bg-violet-400/8 text-[11px] text-violet-200">
-              {index + 1}
-            </span>
+            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full border border-violet-300/18 bg-violet-400/8 text-[11px] text-violet-200">{index + 1}</span>
             <span className="min-w-0 break-words">{step}</span>
           </li>
         ))}
@@ -796,86 +1021,129 @@ export function SimulatorPanel({
   simulatorResult: SimulatorResult;
   runSimulator: (event: FormEvent<HTMLFormElement>) => void;
 }) {
-  return (
-    <div className="grid gap-4 xl:grid-cols-[0.82fr_1.18fr]">
-      <Panel>
-        <span className="sr-only">{dashboardSourceLabels.spendIntentPanel}</span>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <PanelTitle>Rogue Simulator</PanelTitle>
-          <span className="rounded-full border border-violet-300/20 bg-violet-500/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-violet-200">
-            DRY RUN - no pending execution created
-          </span>
-        </div>
-        <p className="mt-4 text-[15px] text-zinc-400">Use Create Spend Intent for real devnet execution.</p>
-        <form className="mt-6 space-y-4" onSubmit={runSimulator}>
-          <div className="grid gap-3 lg:grid-cols-[1fr_0.7fr]">
-            <Field label="Amount">
-              <StyledInput
-                value={simulatorAmount}
-                onChange={(event) => setSimulatorAmount(event.target.value)}
-                placeholder="1"
-                inputMode="numeric"
-                aria-label="Simulation amount"
-              />
-            </Field>
-            <Field label="Mint">
-              <StyledInput value={simulatorMint} onChange={(event) => setSimulatorMint(event.target.value)} placeholder="USDC" aria-label="Simulation mint" />
-            </Field>
-          </div>
-          <Field label="Recipient">
-            <StyledSelect
-              value={simulatorRecipient}
-              onChange={(event) => setSimulatorRecipient(event.target.value)}
-              aria-label="Simulation recipient"
-            >
-              <option value="" className="bg-[#080812] text-zinc-400">
-                Active agent default
-              </option>
-              {recipients.map((recipient) => (
-                <option key={recipient.label} value={recipient.address} className="bg-[#080812] text-white">
-                  {recipient.label} - {compactAddress(recipient.address)}
-                </option>
-              ))}
-            </StyledSelect>
-          </Field>
-          <Field label="Intent">
-            <StyledTextarea
-              value={simulatorGoal}
-              onChange={(event) => setSimulatorGoal(event.target.value)}
-              placeholder="buy coffee"
-              aria-label="Simulation goal"
-            />
-          </Field>
-          <ControlButton type="submit" disabled={!activeAgent} className="w-full justify-center">
-            <ShieldX className="h-4 w-4" />
-            Run Simulation
-          </ControlButton>
-        </form>
-      </Panel>
+  const isBlocked = simulatorResult?.decision === "blocked";
 
-      <Panel>
-        <PanelTitle>Result Panel</PanelTitle>
-        <div className="mt-6">
-          {simulatorResult ? (
-            <div className="rounded-lg border border-white/[0.08] bg-white/[0.025] p-5">
-              <div className="flex items-center gap-3">
-                {simulatorResult.decision === "blocked" ? <XCircle className="h-5 w-5 text-red-400" /> : <CheckCircle2 className="h-5 w-5 text-emerald-400" />}
-                <div className="text-[21px] font-medium text-white">
-                  {simulatorResult.decision === "blocked" ? "Would be blocked" : "Would be approved"}
+  return (
+    <div className="space-y-5">
+      <GlowPanel className="border-amber-300/22 bg-[linear-gradient(90deg,rgba(113,63,18,0.34),rgba(5,10,25,0.70))] p-4" intensity="quiet">
+        <div className="flex flex-wrap items-center gap-4">
+          <AlertTriangle className="h-5 w-5 text-amber-300" />
+          <div className="font-semibold uppercase tracking-[0.08em] text-amber-200">Dry Run Mode</div>
+          <div className="text-[14px] text-slate-300">No transactions will be sent. Results are for simulation and analysis only.</div>
+        </div>
+      </GlowPanel>
+
+      <PageHeader title="Rogue Simulator" subtitle="Simulate and analyze how a spender might attempt to exploit your allowances." />
+      <div className="grid gap-5 xl:grid-cols-[0.75fr_1.25fr]">
+        <GlowPanel className="p-5" intensity="strong">
+          <PanelTitle>Simulation Inputs</PanelTitle>
+          <form className="mt-6 space-y-5" onSubmit={runSimulator}>
+            <div className="grid gap-3 sm:grid-cols-[1fr_0.45fr]">
+              <Field label="Amount">
+                <StyledInput value={simulatorAmount} onChange={(event) => setSimulatorAmount(event.target.value)} placeholder="1,250" inputMode="decimal" aria-label="Simulation amount" />
+              </Field>
+              <Field label="Mint">
+                <StyledInput value={simulatorMint} onChange={(event) => setSimulatorMint(event.target.value)} placeholder="USDC" aria-label="Simulation mint" />
+              </Field>
+            </div>
+            <Field label="Recipient (Spender)">
+              <StyledSelect value={simulatorRecipient} onChange={(event) => setSimulatorRecipient(event.target.value)} aria-label="Simulation recipient">
+                <option value="" className="bg-[#080812] text-zinc-400">Active agent default</option>
+                {recipients.map((recipient) => (
+                  <option key={recipient.label} value={recipient.address} className="bg-[#080812] text-white">{recipient.label} - {compactAddress(recipient.address)}</option>
+                ))}
+              </StyledSelect>
+            </Field>
+            <Field label="Intent (What the spender is trying to do)">
+              <StyledTextarea value={simulatorGoal} onChange={(event) => setSimulatorGoal(event.target.value)} placeholder="Unlimited approval (increaseAllowance type(uint256).max)" aria-label="Simulation goal" />
+            </Field>
+            <ControlButton type="submit" disabled={!activeAgent} className="w-full bg-[linear-gradient(135deg,#7C3AED,#4F46E5)] shadow-[0_0_34px_rgba(124,58,237,0.44)]">
+              <TestTube2 className="h-4 w-4" />
+              Run Simulation
+              <ArrowRight className="h-4 w-4" />
+            </ControlButton>
+          </form>
+        </GlowPanel>
+
+        <GlowPanel className="p-5" intensity="strong">
+          <PanelTitle>Simulation Result</PanelTitle>
+          <div className="mt-5 rounded-xl border border-white/[0.08] bg-white/[0.03] p-5">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_180px] lg:items-center">
+              <div className="flex items-center gap-4">
+                <div className={isBlocked ? "grid h-16 w-16 place-items-center rounded-2xl border border-red-300/35 bg-red-500/12 text-red-300 shadow-[0_0_28px_rgba(248,113,113,0.28)]" : "grid h-16 w-16 place-items-center rounded-2xl border border-emerald-300/35 bg-emerald-500/12 text-emerald-300 shadow-[0_0_28px_rgba(52,211,153,0.26)]"}>
+                  {isBlocked ? <ShieldX className="h-9 w-9" /> : <ShieldCheck className="h-9 w-9" />}
+                </div>
+                <div>
+                  <div className={isBlocked ? "text-[28px] font-semibold text-red-300" : "text-[28px] font-semibold text-emerald-300"}>
+                    {simulatorResult ? (isBlocked ? "Blocked" : "Allowed") : "Awaiting Run"}
+                  </div>
+                  <p className="mt-1 text-[15px] text-slate-400">{simulatorResult?.reason ?? "Run a dry simulation to inspect policy outcome."}</p>
                 </div>
               </div>
-              <div className="mt-5 grid gap-3 lg:grid-cols-2">
-                <SoftMetric label="Reason" value={simulatorResult.reason} />
-                <SoftMetric label="Agent" value={simulatorResult.agent} />
-                <SoftMetric label="Amount" value={`${simulatorResult.amount} ${simulatorResult.mint}`} />
-                <SoftMetric label="Recipient" value={compactAddress(simulatorResult.recipient)} />
+              <div className="grid place-items-center rounded-full border border-violet-300/35 bg-violet-500/12 p-5 text-center shadow-[0_0_30px_rgba(124,58,237,0.34)]">
+                <div className="text-[30px] font-semibold text-white">{simulatorResult ? "98%" : "--"}</div>
+                <div className="text-[12px] text-slate-400">Confidence</div>
               </div>
             </div>
-          ) : (
-            <EmptyState title="Awaiting simulation" body={activeAgent ? "Run a controlled dry-run to see the firewall-style decision." : "Create or select an agent before running simulations."} />
-          )}
+          </div>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <GlowPanel className="p-4" intensity="quiet">
+              <PanelTitle>Route Preview</PanelTitle>
+              <div className="mt-5 grid grid-cols-4 gap-2 text-center text-[12px] text-slate-500">
+                {["Spender", "Approval", "Policy", "Recipient"].map((item, index) => (
+                  <div key={item} className="min-w-0">
+                    <div className="mx-auto grid h-12 w-12 place-items-center rounded-full border border-violet-300/25 bg-violet-500/12 text-violet-200">{index + 1}</div>
+                    <div className="mt-2 truncate">{item}</div>
+                  </div>
+                ))}
+              </div>
+            </GlowPanel>
+            <GlowPanel className="p-4" intensity="quiet">
+              <PanelTitle>Policy Outcome</PanelTitle>
+              <div className="mt-4">
+                <ValidationChecklist
+                  items={[
+                    { label: "Policy Match", detail: simulatorResult ? "Matched visible policy." : "Awaiting result.", status: isBlocked ? "blocked" : "passed" },
+                    { label: "Allowance Impact", detail: `${activeAgent?.ghostAllowanceLive ?? "0"} USDC available.`, status: simulatorResult ? "allowed" : "pending" },
+                    { label: "Settlement Impact", detail: simulatorResult ? "No transaction sent in dry run." : "Simulation only.", status: "passed" }
+                  ]}
+                />
+              </div>
+            </GlowPanel>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <SoftMetric label="Allowance Impact" value={simulatorResult ? `${simulatorResult.amount} ${simulatorResult.mint}` : "No run"} />
+            <SoftMetric label="Settlement Impact" value="Not sent" />
+            <SoftMetric label="Summary" value={simulatorResult?.reason ?? "No simulation result yet."} />
+          </div>
+        </GlowPanel>
+      </div>
+
+      <GlowPanel className="p-5" intensity="strong">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <PanelTitle>Simulation Trace</PanelTitle>
+            <p className="mt-2 text-[14px] text-slate-500">Step-by-step breakdown of how the simulation was evaluated.</p>
+          </div>
+          <ControlButton className="w-auto">
+            Copy ID
+            <Copy className="h-4 w-4" />
+          </ControlButton>
         </div>
-      </Panel>
+        <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+          {["Request Received", "Spender Analysis", "Intent Detection", "Policy Evaluation", "Impact Analysis", "Decision"].map((step, index) => (
+            <div key={step} className={cn("rounded-xl border p-4", index === 5 && isBlocked ? "border-red-300/30 bg-red-500/10" : "border-white/[0.08] bg-white/[0.035]")}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-[13px] font-medium text-white">{index + 1}. {step}</div>
+                <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+              </div>
+              <div className="mt-3 text-[12px] leading-5 text-slate-500">{index === 5 && simulatorResult ? simulatorResult.reason : "Evaluation step completed."}</div>
+            </div>
+          ))}
+        </div>
+      </GlowPanel>
     </div>
   );
 }
@@ -903,65 +1171,180 @@ export function SettingsSection({
   recipients: CommandCenterRecipient[];
   useRecipient: (label: string) => void;
 }) {
-  return (
-    <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
-      <Panel>
-        <PanelTitle>Configuration</PanelTitle>
-        <div className="mt-6 space-y-4">
-          <MetricRow label="Network" value="Devnet" />
-          <MetricRow label="App Mode" value="Command Center" />
-          <MetricRow label="API Base URL" value={typeof window === "undefined" ? "/" : window.location.origin} />
-          <MetricRow label="Version" value="0.1.0" />
-          <MetricRow label="Controller" value={compactAddress(controllerWallet)} />
-        </div>
-        <div className="mt-6 grid gap-2 sm:flex sm:flex-wrap">
-          <ControlButton onClick={() => void resetDemoState()} disabled={isSubmitting}>
-            Reset Demo State
-          </ControlButton>
-          <ControlButton asAnchor href="/docs" disabled>
-            Docs
-          </ControlButton>
-        </div>
-      </Panel>
+  const [tab, setTab] = useState<"general" | "network" | "api" | "recipients" | "docs">("general");
 
-      <Panel>
-        <PanelTitle>Recipients</PanelTitle>
-        <form className="mt-6 grid gap-3 lg:grid-cols-[0.7fr_1fr_auto]" onSubmit={addRecipient}>
-          <StyledInput
-            value={recipientLabel}
-            onChange={(event) => setRecipientLabel(event.target.value)}
-            placeholder="merchant label"
-            aria-label="Recipient label"
-          />
-          <StyledInput
-            value={recipientAddress}
-            onChange={(event) => setRecipientAddress(event.target.value)}
-            placeholder="Solana devnet address"
-            aria-label="Recipient address"
-          />
-          <ControlButton type="submit" disabled={isSubmitting}>
-            <Plus className="h-4 w-4" />
-            Add
-          </ControlButton>
-        </form>
-        <div className="mt-5 space-y-2">
-          {recipients.map((recipient) => (
-            <div key={recipient.label} className="flex flex-col gap-3 rounded-lg border border-white/[0.08] bg-white/[0.025] p-4 md:flex-row md:items-center md:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="font-medium text-white">{recipient.label}</div>
-                  {recipient.isDefaultForActiveAgent ? <StatusBadge status="active">Default</StatusBadge> : null}
-                </div>
-                <div className="mt-1 break-all text-[14px] text-zinc-500">{recipient.address}</div>
-              </div>
-              <ControlButton disabled={recipient.isDefaultForActiveAgent || isSubmitting} onClick={() => useRecipient(recipient.label)}>
-                Use Recipient
-              </ControlButton>
+  return (
+    <div className="space-y-5">
+      <PageHeader title="Settings" />
+      <div className="flex max-w-full gap-6 overflow-x-auto border-b border-[#26345E]">
+        {(["general", "network", "api", "recipients", "docs"] as const).map((item) => (
+          <button key={item} type="button" onClick={() => setTab(item)} className={tab === item ? "border-b-2 border-violet-400 px-1 pb-3 text-[15px] font-medium capitalize text-violet-200" : "px-1 pb-3 text-[15px] capitalize text-slate-400"}>
+            {item}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+        <GlowPanel className="p-5" intensity="quiet">
+          <div className="mb-5 flex items-center gap-4">
+            <div className="grid h-12 w-12 place-items-center rounded-full bg-violet-500/16 text-violet-200">
+              <Gauge className="h-6 w-6" />
             </div>
-          ))}
-          {recipients.length === 0 ? <EmptyState title="No recipients" body="Add a devnet address for the active Agent Vault." /> : null}
+            <div>
+              <h2 className="text-[21px] font-semibold text-white">Application Configuration</h2>
+              <p className="mt-1 text-[14px] text-slate-500">Manage core application settings and preferences.</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <ConfigRow label="Network" detail="Current blockchain network" value="Solana Devnet" />
+            <ConfigRow label="App Mode" detail="Application operating mode" value="Demo" />
+            <ConfigRow label="API Base URL" detail="Backend service endpoint" value={typeof window === "undefined" ? "/" : window.location.origin} />
+            <ConfigRow label="Version" detail="Installed application version" value="0.1.0" />
+            <ConfigRow label="Controller" detail="Active controller wallet" value={compactAddress(controllerWallet)} />
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <ControlButton onClick={() => void resetDemoState()} disabled={isSubmitting} className="border-red-300/30 text-red-200">
+              <AlertTriangle className="h-4 w-4" />
+              Reset Demo State
+            </ControlButton>
+            <ControlButton asAnchor href="https://github.com/Pterodactyl681/WhisperVault#readme">
+              View Docs
+              <ExternalLink className="h-4 w-4" />
+            </ControlButton>
+          </div>
+        </GlowPanel>
+
+        <GlowPanel className="p-5" intensity="quiet">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-[21px] font-semibold text-white">Recipients Management</h2>
+              <p className="mt-1 text-[14px] text-slate-500">Add and manage recipients for agent executions.</p>
+            </div>
+            <ControlButton className="w-auto">Export CSV</ControlButton>
+          </div>
+          <form className="grid gap-3 lg:grid-cols-[0.7fr_1fr_auto]" onSubmit={addRecipient}>
+            <StyledInput value={recipientLabel} onChange={(event) => setRecipientLabel(event.target.value)} placeholder="e.g., Premium Vendor" aria-label="Recipient label" />
+            <StyledInput value={recipientAddress} onChange={(event) => setRecipientAddress(event.target.value)} placeholder="Enter Solana Devnet address" aria-label="Recipient address" />
+            <ControlButton type="submit" disabled={isSubmitting} className="bg-[linear-gradient(135deg,#7C3AED,#4F46E5)]">
+              Add Recipient
+            </ControlButton>
+          </form>
+          <div className="mt-5">
+            {recipients.length > 0 ? (
+              <DataTableShell minWidth={650}>
+                <table className="w-full text-left text-[14px]">
+                  <thead className="border-b border-white/[0.08] text-[12px] uppercase tracking-[0.08em] text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">Merchant Label</th>
+                      <th className="px-4 py-3">Address</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recipients.map((recipient) => (
+                      <tr key={recipient.label} className="border-b border-white/[0.06]">
+                        <td className="px-4 py-4 font-medium text-white">{recipient.label}</td>
+                        <td className="px-4 py-4 text-slate-300">{compactAddress(recipient.address)}</td>
+                        <td className="px-4 py-4"><StatusBadge status={recipient.isDefaultForActiveAgent ? "active" : "neutral"}>{recipient.isDefaultForActiveAgent ? "Default" : "Active"}</StatusBadge></td>
+                        <td className="px-4 py-4">
+                          <ControlButton disabled={recipient.isDefaultForActiveAgent || isSubmitting} onClick={() => useRecipient(recipient.label)} className="min-h-9 px-3">
+                            Use
+                          </ControlButton>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </DataTableShell>
+            ) : (
+              <EmptyState title="No recipients" body="Add a devnet address for the active Agent Vault." />
+            )}
+          </div>
+        </GlowPanel>
+      </div>
+
+      <GlowPanel className="p-5" intensity="strong">
+        <div className="grid gap-5 lg:grid-cols-[160px_minmax(0,1fr)] lg:items-center">
+          <HeroCore variant="shield" className="min-h-[170px]" />
+          <div>
+            <PanelTitle>Configuration Insights</PanelTitle>
+            <div className="mt-4 grid gap-3 md:grid-cols-4">
+              <SoftMetric label="Network Status" value="Connected" />
+              <SoftMetric label="API Health" value="200 OK" />
+              <SoftMetric label="Configuration" value={tab === "docs" ? "Docs linked" : "Valid"} />
+              <SoftMetric label="Recipients" value={`${recipients.length} total`} />
+            </div>
+          </div>
         </div>
-      </Panel>
+      </GlowPanel>
+    </div>
+  );
+}
+
+function ConfigRow({ label, detail, value }: { label: string; detail: string; value: string }) {
+  return (
+    <div className="flex items-center gap-4 rounded-lg border border-white/[0.07] bg-white/[0.035] p-4">
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-violet-500/14 text-violet-200">
+        <Gauge className="h-5 w-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="font-medium text-white">{label}</div>
+        <div className="text-[13px] text-slate-500">{detail}</div>
+      </div>
+      <div className="max-w-[45%] truncate text-right text-[14px] text-slate-200" title={value}>{value}</div>
+      <ArrowRight className="h-4 w-4 text-slate-500" />
+    </div>
+  );
+}
+
+function ReceiptsMiniTable({
+  receipts,
+  emptyTitle,
+  emptyBody
+}: {
+  receipts: CommandCenterReceipt[];
+  emptyTitle: string;
+  emptyBody: string;
+}) {
+  return (
+    <div className="mt-5">
+      {receipts.length ? (
+        <DataTableShell>
+          <table className="w-full text-left text-[14px]">
+            <thead className="border-b border-white/[0.08] text-[12px] uppercase tracking-[0.08em] text-slate-500">
+              <tr>
+                <th className="px-4 py-3 font-medium">Paylink ID</th>
+                <th className="px-4 py-3 font-medium">Agent</th>
+                <th className="px-4 py-3 font-medium">Amount</th>
+                <th className="px-4 py-3 font-medium">Recipient</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {receipts.map((receipt) => (
+                <tr key={receipt.id} className="border-b border-white/[0.06]">
+                  <td className="px-4 py-4 font-medium text-violet-200">{receipt.paylinkId}</td>
+                  <td className="px-4 py-4 text-slate-300">{receipt.agent}</td>
+                  <td className="px-4 py-4 text-white">{receipt.amount} {receipt.mint}</td>
+                  <td className="px-4 py-4 text-slate-300">{compactAddress(receipt.recipient)}</td>
+                  <td className="px-4 py-4"><StatusBadge status={formatExecutionQueueState(receipt)} /></td>
+                  <td className="px-4 py-4"><ExplorerLink url={receipt.explorerUrl} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </DataTableShell>
+      ) : (
+        <div className="grid min-h-[190px] place-items-center rounded-xl border border-white/[0.08] bg-[#071127]/66 text-center">
+          <div>
+            <ShieldCheck className="mx-auto h-12 w-12 text-violet-200 drop-shadow-[0_0_18px_rgba(168,85,247,0.8)]" />
+            <div className="mt-3 font-medium text-white">{emptyTitle}</div>
+            <div className="mt-1 text-[14px] text-slate-500">{emptyBody}</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

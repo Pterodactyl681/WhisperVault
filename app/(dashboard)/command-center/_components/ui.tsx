@@ -1,7 +1,7 @@
 "use client";
 
 import type { ButtonHTMLAttributes, CSSProperties, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
-import { ArrowRight, CircleDot, Copy, ExternalLink, Loader2, LogOut, ShieldCheck, Wallet } from "lucide-react";
+import { ArrowRight, CheckCircle2, CircleDot, Copy, ExternalLink, Loader2, LogOut, Network, ShieldCheck, Sparkles, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formControlClass } from "./constants";
 import { percentOf, statusTone } from "./utils";
@@ -9,7 +9,7 @@ import type { Notice } from "./types";
 
 export function Panel({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <section className={cn("min-w-0 rounded-lg border border-white/[0.10] bg-[#070711]/72 p-5 shadow-[0_0_0_1px_rgba(132,90,255,0.03),0_22px_70px_rgba(0,0,0,0.32)] backdrop-blur-xl", className)}>
+    <section className={cn("min-w-0 rounded-xl border border-[#26345E] bg-[#081329]/78 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_24px_80px_rgba(0,0,0,0.34)] backdrop-blur-xl", className)}>
       {children}
     </section>
   );
@@ -203,7 +203,7 @@ export function ControlButton({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { asAnchor?: boolean; href?: string }) {
   const baseClassName = cn(
-    "inline-flex min-h-10 w-full min-w-0 items-center justify-center gap-2 rounded-lg border border-violet-300/18 bg-violet-400/8 px-3 text-center text-[15px] font-medium text-violet-100 transition hover:border-violet-300/35 hover:bg-violet-400/14 focus-visible:border-violet-400/55 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(139,92,246,0.14)] disabled:cursor-not-allowed disabled:border-white/[0.06] disabled:bg-white/[0.03] disabled:text-zinc-500 disabled:opacity-60 sm:w-auto",
+    "inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-lg border border-violet-300/22 bg-[#101A3A] px-4 text-center text-[15px] font-medium text-violet-100 transition hover:border-violet-300/45 hover:bg-violet-500/16 focus-visible:border-violet-400/70 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(139,92,246,0.18)] disabled:cursor-not-allowed disabled:border-white/[0.06] disabled:bg-white/[0.03] disabled:text-zinc-500 disabled:opacity-60 sm:w-auto",
     className
   );
 
@@ -238,7 +238,7 @@ export function HeaderWalletButton({
       type="button"
       onClick={onClick}
       disabled={connecting}
-      className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-violet-300/25 bg-[#132033]/88 px-4 text-[16px] font-medium text-violet-100 shadow-[0_0_0_1px_rgba(139,92,246,0.05),0_12px_32px_rgba(76,29,149,0.22)] transition hover:border-violet-300/45 hover:bg-[#172844] hover:text-white focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(139,92,246,0.18)] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+      className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-violet-300/35 bg-[linear-gradient(135deg,#6D28D9,#4F46E5)] px-4 text-[15px] font-semibold text-white shadow-[0_0_28px_rgba(109,40,217,0.45)] transition hover:border-violet-200/70 hover:shadow-[0_0_36px_rgba(124,58,237,0.58)] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(139,92,246,0.22)] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
     >
       {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
       {connected ? "Disconnect wallet" : connecting ? "Connecting" : "Connect wallet"}
@@ -337,6 +337,231 @@ export function EmptyState({ title, body, flat = false }: { title: string; body:
     <div className={cn("rounded-lg border border-dashed border-white/[0.10] p-5", flat ? "m-3" : "mt-6")}>
       <div className="font-medium text-white">{title}</div>
       <div className="mt-1 text-[15px] text-zinc-500">{body}</div>
+    </div>
+  );
+}
+
+export function GlowPanel({
+  children,
+  className,
+  intensity = "normal"
+}: {
+  children: ReactNode;
+  className?: string;
+  intensity?: "normal" | "strong" | "quiet";
+}) {
+  return (
+    <section
+      className={cn(
+        "relative min-w-0 overflow-hidden rounded-xl border border-[#293864] bg-[linear-gradient(145deg,rgba(11,23,50,0.88),rgba(5,10,25,0.86))] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_26px_90px_rgba(0,0,0,0.38)] backdrop-blur-xl",
+        "before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_24%_0%,rgba(117,70,255,0.22),transparent_34%),radial-gradient(circle_at_86%_14%,rgba(45,141,255,0.14),transparent_30%)] before:opacity-80",
+        intensity === "strong" ? "border-violet-400/45 shadow-[0_0_0_1px_rgba(139,92,246,0.18),0_0_70px_rgba(91,33,182,0.22),0_26px_90px_rgba(0,0,0,0.42)]" : "",
+        intensity === "quiet" ? "before:opacity-40" : "",
+        className
+      )}
+    >
+      <div className="relative">{children}</div>
+    </section>
+  );
+}
+
+export function StatCard({
+  icon,
+  label,
+  value,
+  detail,
+  tone = "violet"
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  detail?: string;
+  tone?: "violet" | "blue" | "emerald" | "amber" | "red";
+}) {
+  const toneClasses = {
+    violet: "bg-violet-500/16 text-violet-200 shadow-[0_0_30px_rgba(124,58,237,0.28)]",
+    blue: "bg-blue-500/14 text-blue-200 shadow-[0_0_30px_rgba(59,130,246,0.20)]",
+    emerald: "bg-emerald-500/14 text-emerald-200 shadow-[0_0_30px_rgba(16,185,129,0.20)]",
+    amber: "bg-amber-500/14 text-amber-200 shadow-[0_0_30px_rgba(245,158,11,0.18)]",
+    red: "bg-red-500/14 text-red-200 shadow-[0_0_30px_rgba(248,113,113,0.18)]"
+  }[tone];
+
+  return (
+    <GlowPanel className="p-4" intensity="quiet">
+      <div className="flex min-w-0 items-center gap-4">
+        <div className={cn("grid h-12 w-12 shrink-0 place-items-center rounded-full border border-white/10", toneClasses)}>
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <div className="text-[14px] text-slate-300">{label}</div>
+          <div className="mt-1 truncate text-[28px] font-semibold leading-none text-white" title={value}>
+            {value}
+          </div>
+          {detail ? <div className="mt-2 truncate text-[13px] text-slate-500">{detail}</div> : null}
+        </div>
+      </div>
+    </GlowPanel>
+  );
+}
+
+export function TopStatusBar({
+  connected,
+  connecting,
+  onWalletAction,
+  runtimeLabel = "Private Rail Ready",
+  networkLabel = "Devnet"
+}: {
+  connected: boolean;
+  connecting: boolean;
+  onWalletAction: () => void;
+  runtimeLabel?: string;
+  networkLabel?: string;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+      <StatusPill icon={<span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.9)]" />} label={networkLabel} />
+      <StatusPill icon={<Network className="h-4 w-4 text-emerald-300" />} label={runtimeLabel} />
+      <HeaderWalletButton connected={connected} connecting={connecting} onClick={onWalletAction} />
+    </div>
+  );
+}
+
+export function StatusPill({ icon, label, className }: { icon: ReactNode; label: string; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[#283A68] bg-[#08142C]/78 px-4 text-[14px] font-medium text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl",
+        className
+      )}
+    >
+      {icon}
+      <span className="whitespace-nowrap">{label}</span>
+    </div>
+  );
+}
+
+export function PageHeader({ title, subtitle, children }: { title: string; subtitle?: string; children?: ReactNode }) {
+  return (
+    <header className="mb-6 flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <div className="min-w-0">
+        <h1 className="break-words text-[31px] font-semibold leading-tight tracking-normal text-white sm:text-[38px]">{title}</h1>
+        {subtitle ? <p className="mt-2 max-w-2xl text-[16px] leading-7 text-slate-400">{subtitle}</p> : null}
+      </div>
+      {children ? <div className="shrink-0">{children}</div> : null}
+    </header>
+  );
+}
+
+export function HeroCore({
+  variant = "star",
+  label,
+  value,
+  className
+}: {
+  variant?: "star" | "shield" | "orb" | "cube" | "document";
+  label?: string;
+  value?: string;
+  className?: string;
+}) {
+  const isShield = variant === "shield";
+  const isCube = variant === "cube";
+  const isDocument = variant === "document";
+  return (
+    <div className={cn("relative grid min-h-[260px] place-items-center overflow-hidden", className)} aria-hidden="true">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,rgba(124,58,237,0.46),transparent_30%),radial-gradient(circle_at_50%_72%,rgba(45,212,191,0.14),transparent_18%)]" />
+      <div className="absolute bottom-8 h-14 w-72 rounded-full border border-violet-300/40 bg-violet-500/10 blur-[1px] shadow-[0_0_50px_rgba(124,58,237,0.72)]" />
+      <div className="absolute h-60 w-60 rounded-full border border-violet-300/20" />
+      <div className="absolute h-72 w-72 rotate-12 rounded-full border border-blue-300/12" />
+      <div className="absolute h-44 w-44 rounded-full border border-violet-300/20 shadow-[0_0_50px_rgba(124,58,237,0.25)]" />
+      <div className="relative grid place-items-center">
+        {isShield ? (
+          <ShieldCheck className="h-36 w-36 text-violet-200 drop-shadow-[0_0_28px_rgba(167,139,250,0.9)]" strokeWidth={1.05} />
+        ) : isCube ? (
+          <div className="grid h-36 w-36 place-items-center rounded-[28px] border border-violet-200/60 bg-[linear-gradient(145deg,rgba(168,85,247,0.42),rgba(59,130,246,0.18))] shadow-[0_0_55px_rgba(124,58,237,0.75)]">
+            <Wallet className="h-16 w-16 text-violet-100" />
+          </div>
+        ) : isDocument ? (
+          <div className="grid h-36 w-28 place-items-center rounded-xl border border-violet-200/60 bg-[linear-gradient(145deg,rgba(168,85,247,0.30),rgba(15,23,42,0.72))] shadow-[0_0_55px_rgba(124,58,237,0.75)]">
+            <div className="space-y-3">
+              <span className="block h-2 w-14 rounded-full bg-violet-200/70" />
+              <span className="block h-2 w-20 rounded-full bg-violet-200/50" />
+              <span className="block h-2 w-12 rounded-full bg-violet-200/40" />
+            </div>
+          </div>
+        ) : (
+          <Sigil className="h-40 w-40 drop-shadow-[0_0_34px_rgba(168,85,247,0.95)]" />
+        )}
+        {label || value ? (
+          <div className="absolute text-center">
+            {label ? <div className="text-[12px] uppercase tracking-[0.16em] text-violet-200/80">{label}</div> : null}
+            {value ? <div className="mt-2 text-[46px] font-semibold leading-none text-white">{value}</div> : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+export function DataTableShell({ children, minWidth = 760 }: { children: ReactNode; minWidth?: number }) {
+  return (
+    <div className="max-w-full rounded-xl border border-[#27365F] bg-[#071127]/70">
+      <div className="w-full overflow-x-auto">
+        <div style={{ minWidth }} className="w-full">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function Timeline({ items }: { items: { label: string; detail: string; status?: "done" | "active" | "muted" }[] }) {
+  return (
+    <div className="grid gap-4 md:grid-cols-5">
+      {items.map((item, index) => (
+        <div key={item.label} className="relative min-w-0">
+          {index < items.length - 1 ? <div className="absolute left-6 top-6 hidden h-px w-[calc(100%+1rem)] bg-violet-400/50 md:block" /> : null}
+          <div className="relative z-10 flex flex-col gap-3">
+            <div
+              className={cn(
+                "grid h-12 w-12 place-items-center rounded-full border bg-[#0A1530]",
+                item.status === "muted" ? "border-dashed border-slate-500/60 text-slate-500" : "border-violet-300/70 text-violet-100 shadow-[0_0_24px_rgba(124,58,237,0.55)]"
+              )}
+            >
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="font-medium text-white">{item.label}</div>
+              <div className="mt-1 text-[14px] leading-5 text-slate-500">{item.detail}</div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function ValidationChecklist({
+  items
+}: {
+  items: { label: string; detail: string; status: "passed" | "allowed" | "blocked" | "pending" }[];
+}) {
+  return (
+    <div className="space-y-2">
+      {items.map((item) => (
+        <div key={item.label} className="flex min-w-0 items-center gap-3 rounded-lg border border-white/[0.07] bg-white/[0.035] px-3 py-3">
+          <CheckCircle2
+            className={cn(
+              "h-4 w-4 shrink-0",
+              item.status === "blocked" ? "text-red-400" : item.status === "pending" ? "text-amber-300" : "text-emerald-300"
+            )}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="text-[14px] font-medium text-white">{item.label}</div>
+            <div className="mt-0.5 truncate text-[13px] text-slate-500">{item.detail}</div>
+          </div>
+          <StatusBadge status={item.status}>{item.status}</StatusBadge>
+        </div>
+      ))}
     </div>
   );
 }
