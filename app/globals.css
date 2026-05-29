@@ -53,7 +53,6 @@ body {
   font-family: "Popping-Cute", "Segoe UI", "Inter", "Noto Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei",
     "Helvetica Neue", Arial, ui-sans-serif, system-ui, sans-serif;
   background-image: linear-gradient(160deg, #070d18 0%, #0d1728 52%, #09101d 100%);
-  overflow-x: hidden;
   font-size: 1.01rem;
   line-height: 1.55;
   letter-spacing: 0.002em;
@@ -355,13 +354,10 @@ body {
 }
 
 @media (max-width: 768px) {
-  .ambient-layer-stars .ambient-star:nth-child(n + 70),
-  .ambient-layer-particles .ambient-star:nth-child(n + 32) {
-    display: none;
-  }
-
-  .ambient-layer-streaks .ambient-streak:nth-child(n + 4),
-  .ambient-layer-objects .ambient-object:nth-child(n + 4) {
+  .ambient-layer-stars,
+  .ambient-layer-particles,
+  .ambient-layer-streaks,
+  .ambient-layer-objects {
     display: none;
   }
 

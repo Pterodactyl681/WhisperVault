@@ -84,8 +84,8 @@ function createStreaks(count = 3): StreakParticle[] {
   }));
 }
 
-const FAR_STARS = createStars(96, 2026, [1, 2.2], [0.12, 0.42]);
-const MID_PARTICLES = createStars(36, 1337, [1.6, 3], [0.14, 0.48]);
+const FAR_STARS = createStars(42, 2026, [1, 2.2], [0.12, 0.42]);
+const MID_PARTICLES = createStars(14, 1337, [1.6, 3], [0.14, 0.48]);
 const STREAKS = createStreaks();
 
 const LARGE_OBJECTS: LargeObject[] = [
