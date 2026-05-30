@@ -1,12 +1,11 @@
 import type { SectionId } from "./types";
 
 export const GITHUB_URL = "https://github.com/Pterodactyl681/WhisperVault";
-export const X_URL = "#";
 export const DOCS_URL = "https://github.com/Pterodactyl681/WhisperVault#readme";
 export const TELEGRAM_REFERENCE_BOT_URL = process.env.NEXT_PUBLIC_TELEGRAM_BOT_URL?.trim() ?? "";
 
 export const formControlClass =
-  "h-12 w-full min-w-0 rounded-lg border border-[#27345C] bg-[#071024] px-3 text-[16px] text-white caret-violet-300 outline-none transition placeholder:text-slate-500 focus:border-violet-400/70 focus:bg-[#0A1430] focus:shadow-[0_0_0_3px_rgba(139,92,246,0.18),0_0_26px_rgba(110,72,255,0.18)] disabled:cursor-not-allowed disabled:border-white/[0.06] disabled:bg-[#07070D] disabled:text-zinc-600 [color-scheme:dark]";
+  "smooth-control h-12 w-full min-w-0 rounded-lg border border-white/[0.10] bg-[#071121]/82 px-3 text-[16px] text-slate-100 caret-violet-300 outline-none placeholder:text-slate-500 focus:border-violet-300/55 focus:bg-[#0A1428] focus:shadow-[0_0_0_3px_rgba(139,92,246,0.14)] disabled:cursor-not-allowed disabled:border-white/[0.08] disabled:bg-[#080D18]/80 disabled:text-slate-400 [color-scheme:dark]";
 
 export const sectionCopy: Record<SectionId, { title: string; subtitle: string }> = {
   overview: {

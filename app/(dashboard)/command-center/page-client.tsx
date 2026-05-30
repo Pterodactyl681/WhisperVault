@@ -25,6 +25,7 @@ export default function CommandCenterPageClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newAgentName, setNewAgentName] = useState("");
+  const [agentNameError, setAgentNameError] = useState<string | null>(null);
   const [recipientLabel, setRecipientLabel] = useState("");
   const [recipientAddress, setRecipientAddress] = useState("");
   const [spendAmount, setSpendAmount] = useState("");
@@ -128,10 +129,18 @@ export default function CommandCenterPageClient() {
 
   const createAgent = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const trimmedName = newAgentName.trim();
+
+    if (!trimmedName) {
+      setAgentNameError("Enter an Agent Vault name.");
+      return;
+    }
+
+    setAgentNameError(null);
     setIsSubmitting(true);
 
     try {
-      const payload = await submitJson("/api/agents/create", { name: newAgentName }) as {
+      const payload = await submitJson("/api/agents/create", { name: trimmedName }) as {
         agent?: CommandCenterAgent;
         warning?: string;
         message?: string;
@@ -148,10 +157,22 @@ export default function CommandCenterPageClient() {
           : `${payload.message ?? "Agent Vault ready"}. ${payload.nextAction ?? "Connect your agent next"}.`
       });
     } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Agent could not be created." });
+      setAgentNameError(error instanceof Error ? error.message : "Agent could not be created.");
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const updateNewAgentName = (value: string) => {
+    setNewAgentName(value);
+    if (agentNameError) {
+      setAgentNameError(null);
+    }
+  };
+
+  const changeSection = (section: SectionId) => {
+    setActiveSection(section);
+    setNotice(null);
   };
 
   const useAgent = async (agentId: string) => {
@@ -399,7 +420,7 @@ export default function CommandCenterPageClient() {
   return (
     <DashboardShell
       activeSection={activeSection}
-      setActiveSection={setActiveSection}
+      setActiveSection={changeSection}
       activeAgent={activeAgent}
       agents={agents}
       recipients={recipients}
@@ -426,7 +447,8 @@ export default function CommandCenterPageClient() {
       spendResult={spendResult}
       submitSpendIntent={submitSpendIntent}
       newAgentName={newAgentName}
-      setNewAgentName={setNewAgentName}
+      setNewAgentName={updateNewAgentName}
+      agentNameError={agentNameError}
       createAgent={createAgent}
       useAgent={useAgent}
       clearActiveAgent={clearActiveAgent}

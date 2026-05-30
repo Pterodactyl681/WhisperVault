@@ -37,6 +37,9 @@
   --warning: 36 95% 66%;
   --error: 352 80% 68%;
   --radius: 0.85rem;
+  --motion-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-standard: 260ms;
+  --motion-slow: 360ms;
 }
 
 * {
@@ -46,6 +49,10 @@
 html,
 body {
   height: 100%;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
@@ -58,6 +65,125 @@ body {
   letter-spacing: 0.002em;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+.smooth-control {
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity, filter;
+  transition-duration: var(--motion-standard);
+  transition-timing-function: var(--motion-smooth);
+  transform: translateZ(0);
+}
+
+.smooth-control:hover {
+  transform: translateY(-1px);
+}
+
+.smooth-control:active {
+  transform: translateY(0);
+}
+
+.smooth-control:disabled,
+.smooth-control[aria-disabled="true"] {
+  transform: none;
+  filter: saturate(0.72);
+}
+
+.command-center-shell {
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 52% -10%, rgba(74, 35, 168, 0.22), transparent 34%),
+    radial-gradient(circle at 82% 12%, rgba(37, 99, 235, 0.12), transparent 28%),
+    linear-gradient(180deg, #020712 0%, #050b18 46%, #02050d 100%);
+}
+
+.command-center-shell::before,
+.command-center-shell::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.command-center-shell::before {
+  z-index: -2;
+  background:
+    radial-gradient(circle at 22% 18%, rgba(124, 58, 237, 0.16), transparent 30%),
+    radial-gradient(circle at 74% 8%, rgba(56, 189, 248, 0.10), transparent 28%),
+    radial-gradient(circle at 60% 72%, rgba(91, 33, 182, 0.10), transparent 36%);
+  filter: blur(10px);
+  opacity: 0.82;
+  animation: command-center-aurora 18s var(--motion-smooth) infinite;
+}
+
+.command-center-shell::after {
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.032) 1px, transparent 1px),
+    radial-gradient(circle, rgba(196, 181, 253, 0.28) 0 1px, transparent 1.4px),
+    radial-gradient(circle, rgba(96, 165, 250, 0.18) 0 1px, transparent 1.4px);
+  background-size: 82px 82px, 82px 82px, 210px 180px, 260px 220px;
+  background-position: 0 0, 0 0, 24px 38px, 96px 12px;
+  mask-image: radial-gradient(circle at 58% 24%, black, transparent 76%);
+  opacity: 0.42;
+  animation: command-center-grid 22s linear infinite;
+}
+
+.hero-core-aura {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(124, 58, 237, 0.26), transparent 32%),
+    radial-gradient(circle at 50% 72%, rgba(59, 130, 246, 0.10), transparent 22%);
+  animation: hero-core-breathe 6.5s var(--motion-smooth) infinite;
+}
+
+.agent-vault-core {
+  position: relative;
+  width: 9rem;
+  height: 9rem;
+  transform: rotateX(58deg) rotateZ(45deg);
+  transform-style: preserve-3d;
+  filter: drop-shadow(0 24px 34px rgba(0, 0, 0, 0.38)) drop-shadow(0 0 26px rgba(124, 58, 237, 0.28));
+}
+
+.agent-vault-core__lid,
+.agent-vault-core__face {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(221, 214, 254, 0.34);
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(139, 92, 246, 0.36), rgba(15, 23, 42, 0.88) 68%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.agent-vault-core__lid {
+  transform: translateZ(36px);
+}
+
+.agent-vault-core__face {
+  display: grid;
+  place-items: center;
+  transform: translateZ(4px);
+}
+
+.agent-vault-core__face span {
+  position: absolute;
+  width: 44%;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(221, 214, 254, 0.52);
+  box-shadow: 0 0 18px rgba(167, 139, 250, 0.32);
+}
+
+.agent-vault-core__face span:nth-child(1) {
+  transform: rotate(90deg);
+}
+
+.dashboard-nav-scroll {
+  scrollbar-width: none;
+}
+
+.dashboard-nav-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 .ambient-background {
@@ -354,6 +480,17 @@ body {
 }
 
 @media (max-width: 768px) {
+  .command-center-shell::before {
+    opacity: 0.46;
+    animation: none;
+  }
+
+  .command-center-shell::after {
+    background-size: 96px 96px, 96px 96px, 240px 210px, 280px 240px;
+    opacity: 0.22;
+    animation: none;
+  }
+
   .ambient-layer-stars,
   .ambient-layer-particles,
   .ambient-layer-streaks,
@@ -444,7 +581,7 @@ body {
 }
 
 .tab-content-transition {
-  animation: tab-slide-fade-forward 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: tab-slide-fade-forward 340ms var(--motion-smooth);
   will-change: transform, opacity;
 }
 
@@ -453,18 +590,62 @@ body {
 }
 
 .command-center-section-transition {
-  animation: command-center-section-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: command-center-section-in 280ms var(--motion-smooth) both;
   will-change: opacity, transform;
 }
 
 @keyframes command-center-section-in {
   0% {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(10px) scale(0.995);
   }
   100% {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes command-center-aurora {
+  0% {
+    transform: translate3d(-2%, -1%, 0) scale(1);
+    opacity: 0.62;
+  }
+  50% {
+    transform: translate3d(2%, 2%, 0) scale(1.05);
+    opacity: 0.88;
+  }
+  100% {
+    transform: translate3d(-2%, -1%, 0) scale(1);
+    opacity: 0.62;
+  }
+}
+
+@keyframes command-center-grid {
+  0% {
+    background-position: 0 0, 0 0, 24px 38px, 96px 12px;
+    opacity: 0.36;
+  }
+  50% {
+    opacity: 0.48;
+  }
+  100% {
+    background-position: 82px 82px, 82px 82px, 38px 52px, 78px 34px;
+    opacity: 0.36;
+  }
+}
+
+@keyframes hero-core-breathe {
+  0% {
+    opacity: 0.62;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 0.86;
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 0.62;
+    transform: scale(0.98);
   }
 }
 
@@ -702,7 +883,24 @@ body {
     animation: none;
   }
 
+  html {
+    scroll-behavior: auto;
+  }
+
+  .smooth-control,
+  .smooth-control:hover,
+  .smooth-control:active {
+    transition-duration: 1ms;
+    transform: none;
+  }
+
   .command-center-section-transition {
+    animation: none;
+  }
+
+  .command-center-shell::before,
+  .command-center-shell::after,
+  .hero-core-aura {
     animation: none;
   }
 

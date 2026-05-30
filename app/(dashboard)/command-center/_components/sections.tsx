@@ -123,7 +123,7 @@ export function OverviewCards({
                 : "Create an Agent Vault to start securing your AI activity with budgets, allowlists, and private execution rails."}
             </p>
             <div className="mt-7 grid gap-3 sm:flex sm:flex-wrap">
-              <ControlButton onClick={() => setSection("agents")} className="bg-[linear-gradient(135deg,#7C3AED,#4F46E5)] shadow-[0_0_30px_rgba(124,58,237,0.46)]">
+              <ControlButton onClick={() => setSection("agents")} className="bg-[linear-gradient(135deg,#7C3AED,#4F46E5)] shadow-[0_18px_42px_rgba(91,33,182,0.28)]">
                 <Plus className="h-4 w-4" />
                 Create Agent Vault
               </ControlButton>
@@ -138,7 +138,7 @@ export function OverviewCards({
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={<UsersRound className="h-5 w-5" />} label="Active Agent" value={activeAgent ? "1" : "0"} detail={activeAgent?.status ?? "Inactive"} />
-        <StatCard icon={<Wallet className="h-5 w-5" />} label="Live Allowance" value={`${activeAgent?.ghostAllowanceLive ?? "0"} USDC`} detail="Available" tone="blue" />
+        <StatCard icon={<CircleDollarSign className="h-5 w-5" />} label="Live Allowance" value={`${activeAgent?.ghostAllowanceLive ?? "0"} USDC`} detail="Available" tone="blue" />
         <StatCard icon={<Clock3 className="h-5 w-5" />} label="Pending Executions" value={String(pendingCount)} detail={pendingCount ? "Needs attention" : "None"} />
         <StatCard icon={<ShieldCheck className="h-5 w-5" />} label="Firewall Status" value="Strict" detail={activeAgent ? "Active" : "Ready"} tone="emerald" />
       </div>
@@ -168,10 +168,10 @@ export function OverviewCards({
         <ActivityFeed receipts={recentReceipts} setSection={setSection} />
       </div>
 
-      <GlowPanel className="p-5" intensity="strong">
+      <GlowPanel className="p-5" intensity="quiet">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 items-center gap-4">
-            <div className="grid h-16 w-16 shrink-0 place-items-center rounded-full border border-violet-300/40 bg-violet-500/16 shadow-[0_0_34px_rgba(124,58,237,0.48)]">
+            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-xl border border-violet-300/18 bg-violet-500/12 shadow-[0_16px_36px_rgba(0,0,0,0.24)]">
               <Sparkles className="h-7 w-7 text-violet-100" />
             </div>
             <div className="min-w-0">
@@ -182,7 +182,7 @@ export function OverviewCards({
               </p>
             </div>
           </div>
-          <ControlButton onClick={() => setSection(activeAgent ? "executions" : "agents")} className="bg-[linear-gradient(135deg,#7C3AED,#4F46E5)] shadow-[0_0_30px_rgba(124,58,237,0.42)]">
+          <ControlButton onClick={() => setSection(activeAgent ? "executions" : "agents")} className="bg-[linear-gradient(135deg,#7C3AED,#4F46E5)] shadow-[0_18px_42px_rgba(91,33,182,0.26)]">
             {activeAgent ? "Create Spend Intent" : "Create Agent Vault"}
             <ArrowRight className="h-4 w-4" />
           </ControlButton>
@@ -205,7 +205,7 @@ export function ActivityFeed({ receipts, setSection }: { receipts: CommandCenter
     <GlowPanel className="p-5" intensity="quiet">
       <div className="flex items-center justify-between gap-3">
         <PanelTitle>Recent Activity</PanelTitle>
-        <button type="button" onClick={() => setSection("receipts")} className="rounded-lg border border-white/10 px-3 py-2 text-[13px] text-slate-300 transition hover:border-violet-300/35 hover:text-white">
+        <button type="button" onClick={() => setSection("receipts")} className="smooth-control rounded-lg border border-white/10 px-3 py-2 text-[13px] text-slate-300 hover:border-violet-300/28 hover:text-white">
           View all
         </button>
       </div>
@@ -229,8 +229,8 @@ export function ActivityFeed({ receipts, setSection }: { receipts: CommandCenter
 
 function ActivityRow({ icon, title, detail, time, tone }: { icon: ReactNode; title: string; detail: string; time: string; tone: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-transparent p-2 transition hover:border-white/[0.07] hover:bg-white/[0.03]">
-      <div className={tone === "emerald" ? "grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-500/14 text-emerald-300" : "grid h-9 w-9 shrink-0 place-items-center rounded-full bg-violet-500/16 text-violet-200"}>
+    <div className="smooth-control flex items-center gap-3 rounded-lg border border-transparent p-2 hover:border-white/[0.07] hover:bg-white/[0.03]">
+      <div className={tone === "emerald" ? "grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-500/10 text-emerald-300" : "grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-violet-500/12 text-violet-200"}>
         {icon}
       </div>
       <div className="min-w-0 flex-1">
@@ -266,7 +266,7 @@ export function AllowanceSection({
       <PageHeader title="Ghost Allowance" subtitle="Live private allowance trust for the active session." />
       <GlowPanel className="p-5 lg:p-7" intensity="strong">
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(380px,0.72fr)]">
-          <div className="relative rounded-xl border border-[#26345E] bg-[#061026]/66 p-5">
+          <div className="relative rounded-xl border border-white/[0.08] bg-[#061026]/58 p-5">
             <HeroCore variant="orb" label="Live Allowance" value={current} className="min-h-[430px]" />
             <div className="grid gap-3 sm:grid-cols-4">
               <ControlButton disabled title="No open endpoint is exposed in the web API." className="bg-[linear-gradient(135deg,#7C3AED,#4F46E5)]">
@@ -325,8 +325,8 @@ export function AllowanceSection({
 
 function DetailRow({ icon, label, value, badge }: { icon: ReactNode; label: string; value: string; badge?: string }) {
   return (
-    <div className="flex items-center gap-4 border-b border-white/[0.07] pb-4 last:border-b-0">
-      <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-violet-300/30 bg-violet-500/13 text-violet-200 [&_svg]:h-5 [&_svg]:w-5">
+    <div className="flex items-center gap-4 border-b border-white/[0.06] pb-4 last:border-b-0">
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-violet-300/16 bg-violet-500/10 text-violet-200 [&_svg]:h-5 [&_svg]:w-5">
         {icon}
       </div>
       <div className="min-w-0 flex-1 text-[15px] text-slate-300">{label}</div>
@@ -407,7 +407,7 @@ export function FirewallSection({
                 <MetricRow label="Auto-Lockdown" value="Enabled" />
               </div>
             </div>
-            <button type="button" onClick={() => setSection("settings")} className="mt-5 flex w-full items-center justify-between rounded-lg border border-white/[0.08] bg-white/[0.04] p-4 text-left transition hover:border-violet-300/35 hover:bg-violet-500/10">
+            <button type="button" onClick={() => setSection("settings")} className="smooth-control mt-5 flex w-full items-center justify-between rounded-lg border border-white/[0.08] bg-white/[0.035] p-4 text-left hover:border-violet-300/28 hover:bg-violet-500/8">
               <span>
                 <span className="block font-medium text-white">Manage Firewall Settings</span>
                 <span className="mt-1 block text-[13px] text-slate-500">Update policies, allowlists, limits, and risk preferences.</span>
@@ -443,10 +443,10 @@ export function FirewallSection({
 }
 
 function MiniMetric({ icon, label, value, tone }: { icon: ReactNode; label: string; value: string; tone: "violet" | "amber" | "emerald" }) {
-  const toneClass = tone === "emerald" ? "text-emerald-300 bg-emerald-500/13" : tone === "amber" ? "text-amber-300 bg-amber-500/13" : "text-violet-200 bg-violet-500/16";
+  const toneClass = tone === "emerald" ? "text-emerald-300 bg-emerald-500/10" : tone === "amber" ? "text-amber-300 bg-amber-500/10" : "text-violet-200 bg-violet-500/12";
   return (
-    <div className="flex min-w-0 items-center gap-3 rounded-lg border border-white/[0.08] bg-[#071127]/72 p-4">
-      <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-full ${toneClass} [&_svg]:h-5 [&_svg]:w-5`}>{icon}</div>
+    <div className="flex min-w-0 items-center gap-3 rounded-lg border border-white/[0.07] bg-[#071127]/66 p-4">
+      <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${toneClass} [&_svg]:h-5 [&_svg]:w-5`}>{icon}</div>
       <div className="min-w-0">
         <div className="text-[13px] text-slate-500">{label}</div>
         <div className="truncate text-[21px] font-semibold text-white">{value}</div>
@@ -457,8 +457,8 @@ function MiniMetric({ icon, label, value, tone }: { icon: ReactNode; label: stri
 
 function PolicyRuleRow({ title, body, status, value }: { title: string; body: string; status: string; value: string }) {
   return (
-    <div className="flex items-center gap-4 rounded-lg border border-white/[0.07] bg-white/[0.035] p-4">
-      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-violet-500/14 text-violet-200">
+    <div className="smooth-control flex items-center gap-4 rounded-lg border border-white/[0.07] bg-white/[0.028] p-4 hover:bg-white/[0.04]">
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-violet-500/10 text-violet-200">
         <LockKeyhole className="h-5 w-5" />
       </div>
       <div className="min-w-0 flex-1">
@@ -509,7 +509,7 @@ export function ExecutionsSection({
   return (
     <div className="space-y-5">
       <div className="grid gap-5 xl:grid-cols-[0.82fr_1.08fr]">
-        <GlowPanel className="p-5 sm:p-6" intensity="strong">
+      <GlowPanel className="p-5 sm:p-6" intensity="quiet">
           <StepTitle step="1" title="Create Spend Intent" detail="Create a spend intent for your agent to execute." />
           <form className="mt-6 space-y-5" onSubmit={submitSpendIntent}>
             <Field label="Agent">
@@ -538,7 +538,7 @@ export function ExecutionsSection({
             <Field label="Intent">
               <StyledTextarea value={spendGoal} onChange={(event) => setSpendGoal(event.target.value)} placeholder="Pay vendor for analytics dashboard subscription." aria-label="Spend goal" />
             </Field>
-            <ControlButton type="submit" disabled={!activeAgent || isSubmitting} className="w-full bg-[linear-gradient(135deg,#7C3AED,#4F46E5)] shadow-[0_0_34px_rgba(124,58,237,0.45)]">
+            <ControlButton type="submit" disabled={!activeAgent || isSubmitting} className="w-full bg-[linear-gradient(135deg,#7C3AED,#4F46E5)] shadow-[0_18px_42px_rgba(91,33,182,0.26)]">
               {isSubmitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               Create Intent
             </ControlButton>
@@ -546,7 +546,7 @@ export function ExecutionsSection({
         </GlowPanel>
 
         <div className="space-y-5">
-          <GlowPanel className="p-5 sm:p-6" intensity="strong">
+          <GlowPanel className="p-5 sm:p-6" intensity="quiet">
             <StepTitle step="2" title="Pending Execution / Preview" detail="Review the transaction that will be executed by your agent." />
             <div className="mt-5 grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
               <HeroCore variant="cube" className="min-h-[180px]" />
@@ -586,7 +586,7 @@ export function ExecutionsSection({
           </div>
           <div className="flex gap-2">
             {(["queue", "history"] as const).map((tab) => (
-              <button key={tab} type="button" onClick={() => setQueueTab(tab)} className={tab === queueTab ? "rounded-lg border border-violet-300/40 bg-violet-500/16 px-4 py-2 text-violet-100" : "rounded-lg border border-white/10 px-4 py-2 text-slate-400"}>
+              <button key={tab} type="button" onClick={() => setQueueTab(tab)} className={tab === queueTab ? "smooth-control rounded-lg border border-violet-300/30 bg-violet-500/12 px-4 py-2 text-violet-100" : "smooth-control rounded-lg border border-white/10 px-4 py-2 text-slate-400 hover:text-slate-200"}>
                 {tab === "queue" ? "Queue" : "History"}
               </button>
             ))}
@@ -601,9 +601,9 @@ export function ExecutionsSection({
 function StepTitle({ step, title, detail }: { step: string; title: string; detail: string }) {
   return (
     <div className="flex gap-4">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-violet-300/60 bg-violet-500/24 text-[18px] font-semibold text-white shadow-[0_0_24px_rgba(124,58,237,0.48)]">{step}</span>
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-violet-300/28 bg-violet-500/12 text-[18px] font-semibold text-white">{step}</span>
       <div>
-        <h2 className="text-[18px] font-semibold uppercase tracking-[0.04em] text-white">{title}</h2>
+        <h2 className="text-[18px] font-semibold tracking-normal text-white">{title}</h2>
         <p className="mt-1 text-[14px] text-slate-500">{detail}</p>
       </div>
     </div>
@@ -675,7 +675,7 @@ export function ReceiptsSection({ receipts }: { receipts: CommandCenterReceipt[]
                   </thead>
                   <tbody>
                     {filtered.map((receipt) => (
-                      <tr key={receipt.id} onClick={() => setSelectedId(receipt.id)} className="cursor-pointer border-b border-white/[0.06] transition hover:bg-violet-500/8">
+                      <tr key={receipt.id} onClick={() => setSelectedId(receipt.id)} className="cursor-pointer border-b border-white/[0.06] transition-colors hover:bg-violet-500/7">
                         <td className="px-4 py-4 font-medium text-violet-200">{compactAddress(receipt.id)}</td>
                         <td className="px-4 py-4 text-slate-300">{receipt.agent}</td>
                         <td className="px-4 py-4 text-white">{receipt.amount} {receipt.mint}</td>
@@ -687,7 +687,7 @@ export function ReceiptsSection({ receipts }: { receipts: CommandCenterReceipt[]
                 </table>
               </DataTableShell>
             ) : (
-              <div className="grid min-h-[440px] place-items-center text-center">
+              <div className="grid min-h-[360px] place-items-center rounded-xl border border-white/[0.07] bg-white/[0.025] text-center">
                 <div>
                   <HeroCore variant="document" className="mx-auto min-h-[220px] w-full max-w-md" />
                   <h3 className="mt-2 text-[24px] font-semibold text-white">No receipts yet</h3>
@@ -735,6 +735,7 @@ export function AgentsSection({
   isSubmitting,
   newAgentName,
   setNewAgentName,
+  agentNameError,
   createAgent,
   useAgent,
   clearActiveAgent,
@@ -746,6 +747,7 @@ export function AgentsSection({
   isSubmitting: boolean;
   newAgentName: string;
   setNewAgentName: (value: string) => void;
+  agentNameError: string | null;
   createAgent: (event: FormEvent<HTMLFormElement>) => void;
   useAgent: (agentId: string) => void;
   clearActiveAgent: () => void;
@@ -763,7 +765,7 @@ export function AgentsSection({
       <PageHeader title="Agent Vaults" />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_430px]">
         <div className="space-y-5">
-          <GlowPanel className="p-6" intensity="strong">
+        <GlowPanel className="p-6" intensity="strong">
             <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_360px] md:items-center">
               <div>
                 <h2 className="text-[32px] font-semibold leading-tight text-white sm:text-[38px]">
@@ -798,7 +800,7 @@ export function AgentsSection({
 
         <GlowPanel className="p-5 xl:sticky xl:top-6 xl:self-start" intensity="quiet">
           <div className="mb-6 flex items-start gap-4">
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-violet-500/16 text-violet-200">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-violet-500/10 text-violet-200">
               <Plus className="h-6 w-6" />
             </div>
             <div>
@@ -808,7 +810,21 @@ export function AgentsSection({
           </div>
           <form className="space-y-5" onSubmit={createAgent}>
             <Field label="Agent Name">
-              <StyledInput id="agent-vault-name" value={newAgentName} onChange={(event) => setNewAgentName(event.target.value)} placeholder="e.g., Research Agent" aria-label="New Agent Vault name" />
+              <StyledInput
+                id="agent-vault-name"
+                value={newAgentName}
+                onChange={(event) => setNewAgentName(event.target.value)}
+                placeholder="e.g., Research Agent"
+                aria-label="New Agent Vault name"
+                aria-invalid={agentNameError ? true : undefined}
+                aria-describedby={agentNameError ? "agent-vault-name-error" : undefined}
+                className={agentNameError ? "border-red-400/55 focus:border-red-300/70 focus:shadow-[0_0_0_3px_rgba(248,113,113,0.14)]" : ""}
+              />
+              {agentNameError ? (
+                <p id="agent-vault-name-error" className="mt-2 rounded-lg border border-red-400/20 bg-red-500/8 px-3 py-2 text-[13px] text-red-200">
+                  {agentNameError}
+                </p>
+              ) : null}
             </Field>
             <Field label="Description (optional)">
               <StyledTextarea placeholder="Describe the agent's purpose and scope..." aria-label="Agent description" />
@@ -1035,7 +1051,7 @@ export function SimulatorPanel({
 
       <PageHeader title="Rogue Simulator" subtitle="Simulate and analyze how a spender might attempt to exploit your allowances." />
       <div className="grid gap-5 xl:grid-cols-[0.75fr_1.25fr]">
-        <GlowPanel className="p-5" intensity="strong">
+        <GlowPanel className="p-5" intensity="quiet">
           <PanelTitle>Simulation Inputs</PanelTitle>
           <form className="mt-6 space-y-5" onSubmit={runSimulator}>
             <div className="grid gap-3 sm:grid-cols-[1fr_0.45fr]">
@@ -1057,7 +1073,7 @@ export function SimulatorPanel({
             <Field label="Intent (What the spender is trying to do)">
               <StyledTextarea value={simulatorGoal} onChange={(event) => setSimulatorGoal(event.target.value)} placeholder="Unlimited approval (increaseAllowance type(uint256).max)" aria-label="Simulation goal" />
             </Field>
-            <ControlButton type="submit" disabled={!activeAgent} className="w-full bg-[linear-gradient(135deg,#7C3AED,#4F46E5)] shadow-[0_0_34px_rgba(124,58,237,0.44)]">
+            <ControlButton type="submit" disabled={!activeAgent} className="w-full bg-[linear-gradient(135deg,#7C3AED,#4F46E5)] shadow-[0_18px_42px_rgba(91,33,182,0.26)]">
               <TestTube2 className="h-4 w-4" />
               Run Simulation
               <ArrowRight className="h-4 w-4" />
@@ -1065,12 +1081,12 @@ export function SimulatorPanel({
           </form>
         </GlowPanel>
 
-        <GlowPanel className="p-5" intensity="strong">
+        <GlowPanel className="p-5" intensity="quiet">
           <PanelTitle>Simulation Result</PanelTitle>
-          <div className="mt-5 rounded-xl border border-white/[0.08] bg-white/[0.03] p-5">
+          <div className="mt-5 rounded-xl border border-white/[0.08] bg-white/[0.045] p-5">
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_180px] lg:items-center">
               <div className="flex items-center gap-4">
-                <div className={isBlocked ? "grid h-16 w-16 place-items-center rounded-2xl border border-red-300/35 bg-red-500/12 text-red-300 shadow-[0_0_28px_rgba(248,113,113,0.28)]" : "grid h-16 w-16 place-items-center rounded-2xl border border-emerald-300/35 bg-emerald-500/12 text-emerald-300 shadow-[0_0_28px_rgba(52,211,153,0.26)]"}>
+                <div className={isBlocked ? "grid h-16 w-16 place-items-center rounded-2xl border border-red-300/28 bg-red-500/10 text-red-300" : "grid h-16 w-16 place-items-center rounded-2xl border border-emerald-300/24 bg-emerald-500/9 text-emerald-300"}>
                   {isBlocked ? <ShieldX className="h-9 w-9" /> : <ShieldCheck className="h-9 w-9" />}
                 </div>
                 <div>
@@ -1080,7 +1096,7 @@ export function SimulatorPanel({
                   <p className="mt-1 text-[15px] text-slate-400">{simulatorResult?.reason ?? "Run a dry simulation to inspect policy outcome."}</p>
                 </div>
               </div>
-              <div className="grid place-items-center rounded-full border border-violet-300/35 bg-violet-500/12 p-5 text-center shadow-[0_0_30px_rgba(124,58,237,0.34)]">
+              <div className="grid place-items-center rounded-full border border-violet-300/18 bg-violet-500/8 p-5 text-center">
                 <div className="text-[30px] font-semibold text-white">{simulatorResult ? "98%" : "--"}</div>
                 <div className="text-[12px] text-slate-400">Confidence</div>
               </div>
@@ -1121,7 +1137,7 @@ export function SimulatorPanel({
         </GlowPanel>
       </div>
 
-      <GlowPanel className="p-5" intensity="strong">
+      <GlowPanel className="p-5" intensity="quiet">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
             <PanelTitle>Simulation Trace</PanelTitle>

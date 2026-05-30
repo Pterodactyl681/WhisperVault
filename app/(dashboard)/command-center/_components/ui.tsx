@@ -9,24 +9,24 @@ import type { Notice } from "./types";
 
 export function Panel({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <section className={cn("min-w-0 rounded-xl border border-[#26345E] bg-[#081329]/78 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_24px_80px_rgba(0,0,0,0.34)] backdrop-blur-xl", className)}>
+    <section className={cn("min-w-0 rounded-xl border border-white/[0.08] bg-[#081325]/78 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.035),0_20px_70px_rgba(0,0,0,0.28)] backdrop-blur-xl", className)}>
       {children}
     </section>
   );
 }
 
 export function PanelTitle({ children }: { children: ReactNode }) {
-  return <h2 className="text-[15px] font-medium uppercase tracking-[0.08em] text-violet-300">{children}</h2>;
+  return <h2 className="text-[15px] font-semibold tracking-[0.02em] text-violet-200">{children}</h2>;
 }
 
 export function NoticeBanner({ notice }: { notice: NonNullable<Notice> }) {
   return (
     <div
       className={cn(
-        "mb-5 rounded-lg border px-4 py-3 text-[15px]",
-        notice.tone === "success" ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-100" : "",
-        notice.tone === "warning" ? "border-amber-300/25 bg-amber-300/10 text-amber-100" : "",
-        notice.tone === "error" ? "border-red-400/25 bg-red-400/10 text-red-100" : ""
+        "mb-5 rounded-lg border px-4 py-3 text-[15px] shadow-[0_18px_55px_rgba(0,0,0,0.22)] backdrop-blur-xl",
+        notice.tone === "success" ? "border-emerald-400/20 bg-emerald-400/8 text-emerald-100" : "",
+        notice.tone === "warning" ? "border-amber-300/22 bg-amber-300/9 text-amber-100" : "",
+        notice.tone === "error" ? "border-red-400/22 bg-red-500/9 text-red-100" : ""
       )}
     >
       {notice.message}
@@ -36,7 +36,7 @@ export function NoticeBanner({ notice }: { notice: NonNullable<Notice> }) {
 
 export function LoadingStrip() {
   return (
-    <div className="mb-5 flex items-center gap-2 rounded-lg border border-violet-300/15 bg-violet-400/8 px-4 py-3 text-[15px] text-violet-100/75">
+    <div className="mb-5 flex items-center gap-2 rounded-lg border border-violet-300/12 bg-violet-400/7 px-4 py-3 text-[15px] text-violet-100/75">
       <Loader2 className="h-4 w-4 animate-spin text-violet-300" />
       Loading command center data
     </div>
@@ -142,8 +142,8 @@ export function SummaryMetric({ label, value, sublabel }: { label: string; value
 
 export function SoftMetric({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
   return (
-    <div className={cn("rounded-lg border border-white/[0.08] bg-black/18", compact ? "p-3" : "p-4")}>
-      <div className="text-[13px] uppercase tracking-[0.08em] text-zinc-500">{label}</div>
+    <div className={cn("rounded-lg border border-white/[0.07] bg-white/[0.028]", compact ? "p-3" : "p-4")}>
+      <div className="text-[13px] font-medium text-slate-500">{label}</div>
       <div className={cn("mt-2 min-w-0 break-words font-medium text-white", compact ? "text-[15px]" : "text-[17px]")}>{value}</div>
     </div>
   );
@@ -155,11 +155,11 @@ export function StatusBadge({ status, children }: { status?: string | null; chil
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 text-[12px] font-medium uppercase tracking-[0.06em]",
-        tone === "success" ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300" : "",
-        tone === "warning" ? "border-amber-300/25 bg-amber-300/10 text-amber-200" : "",
-        tone === "danger" ? "border-red-400/25 bg-red-400/10 text-red-300" : "",
-        tone === "neutral" ? "border-white/12 bg-white/[0.04] text-zinc-300" : ""
+        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[12px] font-medium tracking-normal",
+        tone === "success" ? "border-emerald-400/22 bg-emerald-400/9 text-emerald-200" : "",
+        tone === "warning" ? "border-amber-300/22 bg-amber-300/9 text-amber-200" : "",
+        tone === "danger" ? "border-red-400/22 bg-red-400/9 text-red-200" : "",
+        tone === "neutral" ? "border-white/10 bg-white/[0.035] text-slate-300" : ""
       )}
     >
       {children ?? status ?? "unknown"}
@@ -188,7 +188,7 @@ export function SidebarFooterLink({ children, href, label }: { children: ReactNo
       rel={href === "#" ? undefined : "noreferrer"}
       title={label}
       aria-label={label}
-      className="grid h-10 w-10 place-items-center rounded-lg border border-white/10 bg-black/20 text-violet-100/60 transition hover:border-violet-300/30 hover:bg-violet-400/8 hover:text-white"
+      className="smooth-control grid h-10 w-10 place-items-center rounded-lg border border-white/10 bg-[#071121]/72 text-violet-100/64 hover:border-violet-300/24 hover:bg-violet-400/8 hover:text-white hover:shadow-[0_0_18px_rgba(167,139,250,0.12)]"
     >
       {children}
     </a>
@@ -203,13 +203,13 @@ export function ControlButton({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { asAnchor?: boolean; href?: string }) {
   const baseClassName = cn(
-    "inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-lg border border-violet-300/22 bg-[#101A3A] px-4 text-center text-[15px] font-medium text-violet-100 transition hover:border-violet-300/45 hover:bg-violet-500/16 focus-visible:border-violet-400/70 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(139,92,246,0.18)] disabled:cursor-not-allowed disabled:border-white/[0.06] disabled:bg-white/[0.03] disabled:text-zinc-500 disabled:opacity-60 sm:w-auto",
+    "smooth-control inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-lg border border-violet-300/18 bg-[#10182E] px-4 text-center text-[15px] font-medium text-violet-100 hover:border-violet-300/38 hover:bg-violet-500/12 focus-visible:border-violet-400/65 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(139,92,246,0.16)] disabled:cursor-not-allowed disabled:border-white/[0.08] disabled:bg-white/[0.04] disabled:text-slate-400 disabled:opacity-85 sm:w-auto",
     className
   );
 
   if (asAnchor) {
     return (
-      <a href={href} className={cn(baseClassName, props.disabled ? "pointer-events-none opacity-45" : "")}>
+      <a href={href} className={cn(baseClassName, props.disabled ? "pointer-events-none opacity-75" : "")}>
         {children}
       </a>
     );
@@ -238,7 +238,7 @@ export function HeaderWalletButton({
       type="button"
       onClick={onClick}
       disabled={connecting}
-      className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-violet-300/35 bg-[linear-gradient(135deg,#6D28D9,#4F46E5)] px-4 text-[15px] font-semibold text-white shadow-[0_0_28px_rgba(109,40,217,0.45)] transition hover:border-violet-200/70 hover:shadow-[0_0_36px_rgba(124,58,237,0.58)] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(139,92,246,0.22)] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+      className="smooth-control inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-violet-300/30 bg-[linear-gradient(135deg,#6D28D9,#4F46E5)] px-4 text-[15px] font-semibold text-white shadow-[0_16px_42px_rgba(91,33,182,0.30)] hover:border-violet-200/55 hover:shadow-[0_18px_46px_rgba(124,58,237,0.36)] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(139,92,246,0.20)] disabled:cursor-not-allowed disabled:opacity-85 sm:w-auto"
     >
       {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
       {connected ? "Disconnect wallet" : connecting ? "Connecting" : "Connect wallet"}
@@ -266,7 +266,7 @@ export function StyledSelect(props: SelectHTMLAttributes<HTMLSelectElement>) {
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-[13px] uppercase tracking-[0.08em] text-zinc-500">{label}</span>
+      <span className="mb-2 block text-[13px] font-medium tracking-[0.01em] text-slate-500">{label}</span>
       {children}
     </label>
   );
@@ -353,10 +353,10 @@ export function GlowPanel({
   return (
     <section
       className={cn(
-        "relative min-w-0 overflow-hidden rounded-xl border border-[#293864] bg-[linear-gradient(145deg,rgba(11,23,50,0.88),rgba(5,10,25,0.86))] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_26px_90px_rgba(0,0,0,0.38)] backdrop-blur-xl",
-        "before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_24%_0%,rgba(117,70,255,0.22),transparent_34%),radial-gradient(circle_at_86%_14%,rgba(45,141,255,0.14),transparent_30%)] before:opacity-80",
-        intensity === "strong" ? "border-violet-400/45 shadow-[0_0_0_1px_rgba(139,92,246,0.18),0_0_70px_rgba(91,33,182,0.22),0_26px_90px_rgba(0,0,0,0.42)]" : "",
-        intensity === "quiet" ? "before:opacity-40" : "",
+        "relative min-w-0 overflow-hidden rounded-xl border border-white/[0.075] bg-[linear-gradient(145deg,rgba(9,18,36,0.88),rgba(4,9,20,0.84))] shadow-[inset_0_1px_0_rgba(255,255,255,0.045),0_22px_72px_rgba(0,0,0,0.30)] backdrop-blur-xl",
+        "before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_18%_0%,rgba(124,58,237,0.13),transparent_34%),radial-gradient(circle_at_90%_10%,rgba(59,130,246,0.08),transparent_28%)] before:opacity-70",
+        intensity === "strong" ? "border-violet-300/18 shadow-[inset_0_1px_0_rgba(255,255,255,0.055),0_26px_82px_rgba(0,0,0,0.36),0_0_46px_rgba(91,33,182,0.12)] before:opacity-100" : "",
+        intensity === "quiet" ? "before:opacity-35" : "",
         className
       )}
     >
@@ -379,21 +379,21 @@ export function StatCard({
   tone?: "violet" | "blue" | "emerald" | "amber" | "red";
 }) {
   const toneClasses = {
-    violet: "bg-violet-500/16 text-violet-200 shadow-[0_0_30px_rgba(124,58,237,0.28)]",
-    blue: "bg-blue-500/14 text-blue-200 shadow-[0_0_30px_rgba(59,130,246,0.20)]",
-    emerald: "bg-emerald-500/14 text-emerald-200 shadow-[0_0_30px_rgba(16,185,129,0.20)]",
-    amber: "bg-amber-500/14 text-amber-200 shadow-[0_0_30px_rgba(245,158,11,0.18)]",
-    red: "bg-red-500/14 text-red-200 shadow-[0_0_30px_rgba(248,113,113,0.18)]"
+    violet: "bg-violet-500/12 text-violet-200",
+    blue: "bg-blue-500/10 text-blue-200",
+    emerald: "bg-emerald-500/10 text-emerald-200",
+    amber: "bg-amber-500/10 text-amber-200",
+    red: "bg-red-500/10 text-red-200"
   }[tone];
 
   return (
     <GlowPanel className="p-4" intensity="quiet">
       <div className="flex min-w-0 items-center gap-4">
-        <div className={cn("grid h-12 w-12 shrink-0 place-items-center rounded-full border border-white/10", toneClasses)}>
+        <div className={cn("grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-white/9", toneClasses)}>
           {icon}
         </div>
         <div className="min-w-0">
-          <div className="text-[14px] text-slate-300">{label}</div>
+          <div className="text-[14px] text-slate-400">{label}</div>
           <div className="mt-1 truncate text-[28px] font-semibold leading-none text-white" title={value}>
             {value}
           </div>
@@ -418,9 +418,9 @@ export function TopStatusBar({
   networkLabel?: string;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-      <StatusPill icon={<span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.9)]" />} label={networkLabel} />
-      <StatusPill icon={<Network className="h-4 w-4 text-emerald-300" />} label={runtimeLabel} />
+    <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+      <StatusPill icon={<Network className="h-4 w-4 text-blue-300" />} label={networkLabel} className="w-full border-blue-300/16 bg-blue-500/8 text-blue-100 sm:w-auto" />
+      <StatusPill icon={<span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.65)]" />} label={runtimeLabel} className="w-full border-emerald-300/16 bg-emerald-500/8 text-emerald-100 sm:w-auto" />
       <HeaderWalletButton connected={connected} connecting={connecting} onClick={onWalletAction} />
     </div>
   );
@@ -430,7 +430,7 @@ export function StatusPill({ icon, label, className }: { icon: ReactNode; label:
   return (
     <div
       className={cn(
-        "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[#283A68] bg-[#08142C]/78 px-4 text-[14px] font-medium text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl",
+        "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-white/[0.08] bg-[#081325]/78 px-4 text-[14px] font-medium text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] backdrop-blur-xl",
         className
       )}
     >
@@ -465,23 +465,42 @@ export function HeroCore({
 }) {
   const isShield = variant === "shield";
   const isCube = variant === "cube";
+  const isOrb = variant === "orb";
   const isDocument = variant === "document";
   return (
     <div className={cn("relative grid min-h-[260px] place-items-center overflow-hidden", className)} aria-hidden="true">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,rgba(124,58,237,0.46),transparent_30%),radial-gradient(circle_at_50%_72%,rgba(45,212,191,0.14),transparent_18%)]" />
-      <div className="absolute bottom-8 h-14 w-72 rounded-full border border-violet-300/40 bg-violet-500/10 blur-[1px] shadow-[0_0_50px_rgba(124,58,237,0.72)]" />
-      <div className="absolute h-60 w-60 rounded-full border border-violet-300/20" />
-      <div className="absolute h-72 w-72 rotate-12 rounded-full border border-blue-300/12" />
-      <div className="absolute h-44 w-44 rounded-full border border-violet-300/20 shadow-[0_0_50px_rgba(124,58,237,0.25)]" />
+      <div className="hero-core-aura absolute inset-0" />
+      <div className="absolute bottom-8 h-10 w-64 rounded-full border border-violet-300/22 bg-violet-500/8 blur-[1px] shadow-[0_0_42px_rgba(124,58,237,0.32)]" />
+      <div className="absolute h-60 w-60 rounded-full border border-violet-200/12" />
+      <div className="absolute h-72 w-72 rotate-12 rounded-full border border-blue-200/8" />
+      <div className="absolute h-40 w-40 rounded-full border border-violet-200/14 shadow-[0_0_42px_rgba(124,58,237,0.12)]" />
       <div className="relative grid place-items-center">
         {isShield ? (
-          <ShieldCheck className="h-36 w-36 text-violet-200 drop-shadow-[0_0_28px_rgba(167,139,250,0.9)]" strokeWidth={1.05} />
+          <div className="grid h-44 w-44 place-items-center rounded-full border border-violet-200/18 bg-[radial-gradient(circle_at_50%_42%,rgba(124,58,237,0.20),rgba(5,10,25,0.55)_62%,transparent_72%)]">
+            <ShieldCheck className="h-28 w-28 text-violet-100 drop-shadow-[0_0_22px_rgba(167,139,250,0.55)]" strokeWidth={1.15} />
+          </div>
         ) : isCube ? (
-          <div className="grid h-36 w-36 place-items-center rounded-[28px] border border-violet-200/60 bg-[linear-gradient(145deg,rgba(168,85,247,0.42),rgba(59,130,246,0.18))] shadow-[0_0_55px_rgba(124,58,237,0.75)]">
-            <Wallet className="h-16 w-16 text-violet-100" />
+          <div className="agent-vault-core">
+            <div className="agent-vault-core__lid" />
+            <div className="agent-vault-core__face">
+              <span />
+              <span />
+            </div>
+          </div>
+        ) : isOrb ? (
+          <div className="relative grid h-64 w-64 place-items-center rounded-full bg-[conic-gradient(from_210deg,#8B5CF6_0deg,#C4B5FD_118deg,rgba(59,130,246,0.34)_206deg,rgba(255,255,255,0.08)_360deg)] p-[2px] shadow-[0_0_54px_rgba(124,58,237,0.28)]">
+            <div className="absolute inset-5 rounded-full border border-violet-200/12" />
+            <div className="absolute inset-10 rounded-full border border-blue-200/10" />
+            <div className="grid h-full w-full place-items-center rounded-full border border-white/[0.08] bg-[radial-gradient(circle_at_50%_36%,rgba(124,58,237,0.24),rgba(5,10,25,0.94)_64%)]">
+              <div className="text-center">
+                {label ? <div className="text-[12px] font-medium tracking-[0.14em] text-violet-200/75">{label}</div> : null}
+                <div className="mt-3 text-[58px] font-semibold leading-none text-white">{value ?? "0"}</div>
+                <div className="mt-2 text-[15px] text-slate-400">USDC live</div>
+              </div>
+            </div>
           </div>
         ) : isDocument ? (
-          <div className="grid h-36 w-28 place-items-center rounded-xl border border-violet-200/60 bg-[linear-gradient(145deg,rgba(168,85,247,0.30),rgba(15,23,42,0.72))] shadow-[0_0_55px_rgba(124,58,237,0.75)]">
+          <div className="grid h-36 w-28 place-items-center rounded-xl border border-violet-200/28 bg-[linear-gradient(145deg,rgba(124,58,237,0.20),rgba(15,23,42,0.78))] shadow-[0_22px_55px_rgba(0,0,0,0.32),0_0_34px_rgba(124,58,237,0.20)]">
             <div className="space-y-3">
               <span className="block h-2 w-14 rounded-full bg-violet-200/70" />
               <span className="block h-2 w-20 rounded-full bg-violet-200/50" />
@@ -489,9 +508,9 @@ export function HeroCore({
             </div>
           </div>
         ) : (
-          <Sigil className="h-40 w-40 drop-shadow-[0_0_34px_rgba(168,85,247,0.95)]" />
+          <Sigil className="h-40 w-40 drop-shadow-[0_0_28px_rgba(168,85,247,0.58)]" />
         )}
-        {label || value ? (
+        {!isOrb && (label || value) ? (
           <div className="absolute text-center">
             {label ? <div className="text-[12px] uppercase tracking-[0.16em] text-violet-200/80">{label}</div> : null}
             {value ? <div className="mt-2 text-[46px] font-semibold leading-none text-white">{value}</div> : null}

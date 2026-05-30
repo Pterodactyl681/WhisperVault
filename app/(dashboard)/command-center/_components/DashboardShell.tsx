@@ -1,9 +1,9 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { BookOpenText, Gauge, Github, Home, ReceiptText, Settings, ShieldCheck, Sparkles, Swords, Twitter, UsersRound } from "lucide-react";
+import { BookOpenText, Gauge, Github, Home, ReceiptText, Settings, ShieldCheck, Sparkles, Swords, UsersRound } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { DOCS_URL, GITHUB_URL, X_URL } from "./constants";
+import { DOCS_URL, GITHUB_URL } from "./constants";
 import type { CommandCenterAgent, CommandCenterReceipt, CommandCenterRecipient, GeneratedAgentTokenState, Notice, SectionId, SimulatorResult, SpendResult } from "./types";
 import { AgentsSection, AllowanceSection, ExecutionsSection, FirewallSection, OverviewCards, ReceiptsSection, SettingsSection, SimulatorPanel } from "./sections";
 import { LoadingStrip, NoticeBanner, SidebarFooterLink, Sigil, StatusPill, TopStatusBar } from "./ui";
@@ -50,6 +50,7 @@ export interface DashboardShellProps {
   submitSpendIntent: (event: FormEvent<HTMLFormElement>) => void;
   newAgentName: string;
   setNewAgentName: (value: string) => void;
+  agentNameError: string | null;
   createAgent: (event: FormEvent<HTMLFormElement>) => void;
   useAgent: (agentId: string) => void;
   clearActiveAgent: () => void;
@@ -87,13 +88,13 @@ export function DashboardShell(props: DashboardShellProps) {
           : "Runtime Ready";
 
   return (
-    <div className="relative min-h-dvh bg-[#03030A] bg-[radial-gradient(circle_at_55%_0%,rgba(58,103,255,0.20),transparent_30%),radial-gradient(circle_at_45%_16%,rgba(124,58,237,0.24),transparent_36%),linear-gradient(180deg,#03030A_0%,#071022_48%,#020207_100%)] text-white after:pointer-events-none after:absolute after:inset-0 after:hidden after:bg-[linear-gradient(rgba(128,156,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(128,156,255,0.035)_1px,transparent_1px)] after:bg-[size:76px_76px] after:[mask-image:radial-gradient(circle_at_58%_24%,black,transparent_78%)] md:after:block">
-      <div className="relative mx-auto grid min-h-dvh w-full max-w-[1600px] grid-cols-1 lg:grid-cols-[264px_minmax(0,1fr)]">
+    <div className="command-center-shell relative min-h-dvh overflow-x-hidden bg-[#020712] text-white">
+      <div className="relative mx-auto grid min-h-dvh w-full max-w-[1440px] grid-cols-1 lg:grid-cols-[248px_minmax(0,1fr)]">
         <Sidebar activeSection={props.activeSection} setActiveSection={props.setActiveSection} />
         <div className="min-w-0">
           <MobileNav activeSection={props.activeSection} setActiveSection={props.setActiveSection} />
-          <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-8 lg:py-6 xl:px-9">
-            <div className="mb-6 flex justify-end">
+          <main className="mx-auto min-w-0 max-w-[1180px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6 xl:px-9">
+            <div className="mb-6 flex justify-stretch sm:justify-end">
               <TopStatusBar
                 connected={props.walletConnected}
                 connecting={props.walletConnecting}
@@ -147,6 +148,7 @@ export function DashboardShell(props: DashboardShellProps) {
                   isSubmitting={props.isSubmitting}
                   newAgentName={props.newAgentName}
                   setNewAgentName={props.setNewAgentName}
+                  agentNameError={props.agentNameError}
                   createAgent={props.createAgent}
                   useAgent={props.useAgent}
                   clearActiveAgent={props.clearActiveAgent}
@@ -202,7 +204,6 @@ export function Sidebar({ activeSection, setActiveSection }: { activeSection: Se
           <Sigil className="h-12 w-12 drop-shadow-[0_0_20px_rgba(168,85,247,0.85)]" />
           <div>
             <div className="text-[17px] font-semibold uppercase tracking-[0.11em] text-white">WhisperVault</div>
-            <div className="text-[12px] text-violet-200/58">Private by design</div>
           </div>
         </div>
         <NavList activeSection={activeSection} setActiveSection={setActiveSection} orientation="vertical" />
@@ -213,15 +214,12 @@ export function Sidebar({ activeSection, setActiveSection }: { activeSection: Se
             className="w-full justify-start"
           />
           <div className="flex w-full items-center justify-center gap-2">
-          <SidebarFooterLink href={GITHUB_URL} label="GitHub">
-            <Github className="h-4 w-4" />
-          </SidebarFooterLink>
-          <SidebarFooterLink href={X_URL} label="X / Twitter">
-            <Twitter className="h-4 w-4" />
-          </SidebarFooterLink>
-          <SidebarFooterLink href={DOCS_URL} label="Docs / README">
-            <BookOpenText className="h-4 w-4" />
-          </SidebarFooterLink>
+            <SidebarFooterLink href={GITHUB_URL} label="GitHub">
+              <Github className="h-4 w-4" />
+            </SidebarFooterLink>
+            <SidebarFooterLink href={DOCS_URL} label="Docs / README">
+              <BookOpenText className="h-4 w-4" />
+            </SidebarFooterLink>
           </div>
         </div>
       </div>
@@ -236,7 +234,6 @@ export function MobileNav({ activeSection, setActiveSection }: { activeSection: 
         <Sigil className="h-9 w-9" />
         <div className="min-w-0">
           <div className="truncate text-[15px] font-semibold uppercase tracking-[0.11em] text-white">WhisperVault</div>
-          <div className="text-[12px] text-violet-200/58">Private by design</div>
         </div>
       </div>
       <NavList activeSection={activeSection} setActiveSection={setActiveSection} orientation="horizontal" />
@@ -246,7 +243,7 @@ export function MobileNav({ activeSection, setActiveSection }: { activeSection: 
 
 function NavList({ activeSection, setActiveSection, orientation }: { activeSection: SectionId; setActiveSection: (section: SectionId) => void; orientation: "horizontal" | "vertical" }) {
   return (
-    <nav className={cn("flex gap-2", orientation === "horizontal" ? "max-w-full overflow-x-auto pb-1" : "flex-col")}>
+    <nav className={cn("flex gap-2", orientation === "horizontal" ? "dashboard-nav-scroll max-w-full overflow-x-auto pb-1" : "flex-col")}>
       {navItems.map((item) => {
         const Icon = item.icon;
         const isActive = activeSection === item.id;
@@ -257,13 +254,13 @@ function NavList({ activeSection, setActiveSection, orientation }: { activeSecti
             type="button"
             onClick={() => setActiveSection(item.id)}
             className={cn(
-              "group flex min-h-11 shrink-0 items-center gap-3 rounded-lg border px-3 text-left text-[15px] transition",
+              "smooth-control group flex min-h-11 shrink-0 items-center gap-3 rounded-lg border px-3 text-left text-[15px]",
               isActive
                 ? "border-violet-400/45 bg-[linear-gradient(135deg,rgba(91,33,182,0.52),rgba(30,41,105,0.66))] text-white shadow-[0_0_30px_rgba(124,58,237,0.28)]"
                 : "border-transparent text-slate-300 hover:border-violet-400/20 hover:bg-white/[0.04] hover:text-white"
             )}
           >
-            <Icon className={cn("h-4 w-4", isActive ? "text-violet-300" : "text-violet-200/70")} />
+            <Icon className={cn("h-4 w-4 transition-colors duration-300", isActive ? "text-violet-300" : "text-violet-200/70")} />
             <span className="whitespace-nowrap">{item.label}</span>
           </button>
         );

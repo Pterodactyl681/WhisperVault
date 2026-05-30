@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpenText, Github, Sparkles, Twitter } from "lucide-react";
+import { BookOpenText, Github, Sparkles } from "lucide-react";
 import Image from "next/image";
 import { appConfig } from "@/lib/app-config";
 
@@ -39,19 +39,10 @@ export function Footer() {
           <div className="space-y-1.5 md:text-right">
             <div className="flex flex-wrap items-center gap-2 md:justify-end">
               <Link
-                href={appConfig.site.links.twitterX}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-xl border border-border/85 bg-card/80 px-3 py-2 text-xs text-foreground/90 transition-colors hover:border-primary/45 hover:bg-card"
-              >
-                <Twitter className="h-3.5 w-3.5" />
-                Twitter / X
-              </Link>
-              <Link
                 href={appConfig.site.links.github}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-xl border border-border/85 bg-card/80 px-3 py-2 text-xs text-foreground/90 transition-colors hover:border-primary/45 hover:bg-card"
+                className="smooth-control inline-flex items-center gap-2 rounded-xl border border-border/85 bg-card/80 px-3 py-2 text-xs text-foreground/90 hover:border-primary/45 hover:bg-card hover:shadow-[0_0_20px_rgba(78,215,255,0.12)]"
               >
                 <Github className="h-3.5 w-3.5" />
                 GitHub
@@ -60,7 +51,7 @@ export function Footer() {
                 href={appConfig.site.links.docs}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-xl border border-border/85 bg-card/80 px-3 py-2 text-xs text-foreground/90 transition-colors hover:border-primary/45 hover:bg-card"
+                className="smooth-control inline-flex items-center gap-2 rounded-xl border border-border/85 bg-card/80 px-3 py-2 text-xs text-foreground/90 hover:border-primary/45 hover:bg-card hover:shadow-[0_0_20px_rgba(78,215,255,0.12)]"
               >
                 <BookOpenText className="h-3.5 w-3.5" />
                 README / Docs
