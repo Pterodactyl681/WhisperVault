@@ -5,7 +5,7 @@ export const DOCS_URL = "https://github.com/Pterodactyl681/WhisperVault#readme";
 export const TELEGRAM_REFERENCE_BOT_URL = process.env.NEXT_PUBLIC_TELEGRAM_BOT_URL?.trim() ?? "";
 
 export const formControlClass =
-  "smooth-control h-12 w-full min-w-0 rounded-lg border border-white/[0.10] bg-[#071121]/82 px-3 text-[16px] text-slate-100 caret-violet-300 outline-none placeholder:text-slate-500 focus:border-violet-300/55 focus:bg-[#0A1428] focus:shadow-[0_0_0_3px_rgba(139,92,246,0.14)] disabled:cursor-not-allowed disabled:border-white/[0.08] disabled:bg-[#080D18]/80 disabled:text-slate-400 [color-scheme:dark]";
+  "smooth-control h-12 w-full min-w-0 rounded-xl border border-slate-700/70 bg-[#06111f]/80 px-3 text-[16px] text-slate-100 caret-violet-300 outline-none placeholder:text-slate-500 transition focus:border-violet-400/70 focus:bg-[#081426] focus:shadow-[0_0_0_2px_rgba(139,92,246,0.20)] disabled:cursor-not-allowed disabled:border-slate-800 disabled:bg-slate-900/45 disabled:text-slate-500 [color-scheme:dark]";
 
 export const sectionCopy: Record<SectionId, { title: string; subtitle: string }> = {
   overview: {

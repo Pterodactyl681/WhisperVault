@@ -649,6 +649,60 @@ body {
   }
 }
 
+.hero-orbit {
+  animation: hero-orbit-drift 9s var(--motion-smooth) infinite;
+}
+
+.hero-star-core {
+  animation: hero-core-breathe 6.5s var(--motion-smooth) infinite;
+}
+
+.hero-shield-field {
+  filter: drop-shadow(0 0 28px rgba(124, 58, 237, 0.22));
+  animation: hero-shield-pulse 7s var(--motion-smooth) infinite;
+}
+
+.hero-radar {
+  box-shadow: inset 0 0 34px rgba(16, 185, 129, 0.08), 0 0 42px rgba(16, 185, 129, 0.12);
+}
+
+.hero-radar-sweep {
+  animation: hero-radar-sweep 4.8s linear infinite;
+}
+
+@keyframes hero-orbit-drift {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(8deg) scale(1.025);
+  }
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+@keyframes hero-shield-pulse {
+  0%,
+  100% {
+    opacity: 0.82;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes hero-radar-sweep {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @keyframes tab-slide-fade-forward {
   0% {
     opacity: 0;
@@ -908,6 +962,13 @@ body {
     animation: none;
   }
 
+  .hero-orbit,
+  .hero-star-core,
+  .hero-shield-field,
+  .hero-radar-sweep {
+    animation: none;
+  }
+
   .ambient-orb {
     animation: none;
   }
@@ -963,6 +1024,15 @@ button,
 select,
 textarea {
   font: inherit;
+}
+
+input:-webkit-autofill,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: #f1f5f9;
+  caret-color: #c4b5fd;
+  box-shadow: 0 0 0 1000px rgba(6, 17, 31, 0.96) inset;
+  transition: background-color 9999s ease-out;
 }
 
 .wallet-adapter-button,

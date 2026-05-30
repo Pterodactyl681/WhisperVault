@@ -29,7 +29,7 @@ import {
   ShieldCheck,
   ShieldX,
   Sparkles,
-  TestTube2,
+  FlaskConical,
   UsersRound,
   Wallet,
   XCircle,
@@ -157,7 +157,9 @@ export function OverviewCards({
               ["Smart Contract", "Operational"]
             ].map(([label, value]) => (
               <div key={label} className="flex items-center gap-3 rounded-lg border border-white/[0.07] bg-white/[0.035] p-4">
-                <CheckCircle2 className="h-5 w-5 text-emerald-300" />
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-emerald-300/20 bg-emerald-500/10 text-emerald-300">
+                  <CheckCircle2 className="h-5 w-5" />
+                </span>
                 <span className="min-w-0 flex-1 text-[15px] text-slate-300">{label}</span>
                 <span className="text-[15px] font-medium text-white">{value}</span>
               </div>
@@ -230,7 +232,7 @@ export function ActivityFeed({ receipts, setSection }: { receipts: CommandCenter
 function ActivityRow({ icon, title, detail, time, tone }: { icon: ReactNode; title: string; detail: string; time: string; tone: string }) {
   return (
     <div className="smooth-control flex items-center gap-3 rounded-lg border border-transparent p-2 hover:border-white/[0.07] hover:bg-white/[0.03]">
-      <div className={tone === "emerald" ? "grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-500/10 text-emerald-300" : "grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-violet-500/12 text-violet-200"}>
+      <div className={tone === "emerald" ? "grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-emerald-300/20 bg-emerald-500/10 text-emerald-300" : "grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-violet-200"}>
         {icon}
       </div>
       <div className="min-w-0 flex-1">
@@ -326,7 +328,7 @@ export function AllowanceSection({
 function DetailRow({ icon, label, value, badge }: { icon: ReactNode; label: string; value: string; badge?: string }) {
   return (
     <div className="flex items-center gap-4 border-b border-white/[0.06] pb-4 last:border-b-0">
-      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-violet-300/16 bg-violet-500/10 text-violet-200 [&_svg]:h-5 [&_svg]:w-5">
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-violet-200 [&_svg]:h-5 [&_svg]:w-5">
         {icon}
       </div>
       <div className="min-w-0 flex-1 text-[15px] text-slate-300">{label}</div>
@@ -443,10 +445,10 @@ export function FirewallSection({
 }
 
 function MiniMetric({ icon, label, value, tone }: { icon: ReactNode; label: string; value: string; tone: "violet" | "amber" | "emerald" }) {
-  const toneClass = tone === "emerald" ? "text-emerald-300 bg-emerald-500/10" : tone === "amber" ? "text-amber-300 bg-amber-500/10" : "text-violet-200 bg-violet-500/12";
+  const toneClass = tone === "emerald" ? "border-emerald-300/20 bg-emerald-500/10 text-emerald-300" : tone === "amber" ? "border-amber-300/22 bg-amber-500/10 text-amber-300" : "border-white/10 bg-white/[0.04] text-violet-200";
   return (
     <div className="flex min-w-0 items-center gap-3 rounded-lg border border-white/[0.07] bg-[#071127]/66 p-4">
-      <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${toneClass} [&_svg]:h-5 [&_svg]:w-5`}>{icon}</div>
+      <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl border ${toneClass} [&_svg]:h-5 [&_svg]:w-5`}>{icon}</div>
       <div className="min-w-0">
         <div className="text-[13px] text-slate-500">{label}</div>
         <div className="truncate text-[21px] font-semibold text-white">{value}</div>
@@ -458,7 +460,7 @@ function MiniMetric({ icon, label, value, tone }: { icon: ReactNode; label: stri
 function PolicyRuleRow({ title, body, status, value }: { title: string; body: string; status: string; value: string }) {
   return (
     <div className="smooth-control flex items-center gap-4 rounded-lg border border-white/[0.07] bg-white/[0.028] p-4 hover:bg-white/[0.04]">
-      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-violet-500/10 text-violet-200">
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-violet-200">
         <LockKeyhole className="h-5 w-5" />
       </div>
       <div className="min-w-0 flex-1">
@@ -549,7 +551,7 @@ export function ExecutionsSection({
           <GlowPanel className="p-5 sm:p-6" intensity="quiet">
             <StepTitle step="2" title="Pending Execution / Preview" detail="Review the transaction that will be executed by your agent." />
             <div className="mt-5 grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
-              <HeroCore variant="cube" className="min-h-[180px]" />
+              <HeroCore variant="pipeline" className="min-h-[180px]" />
               <div className="space-y-3">
                 <MetricRow label="From (Agent Wallet)" value={compactAddress(activeAgent?.id)} />
                 <MetricRow label="To (Recipient)" value={compactAddress(spendRecipient || activeAgent?.defaultRecipientAddress)} />
@@ -703,7 +705,7 @@ export function ReceiptsSection({ receipts }: { receipts: CommandCenterReceipt[]
             <PanelTitle>Receipt Details</PanelTitle>
             {selected ? (
               <div className="mt-5 space-y-3">
-                <HeroCore variant="cube" className="min-h-[220px]" />
+                <HeroCore variant="document" className="min-h-[220px]" />
                 <MetricRow label="Receipt" value={selected.id} />
                 <MetricRow label="MagicBlock Rail" value={formatMagicBlockStatus(selected)} />
                 <MetricRow label="Mode" value={formatReceiptMagicBlockMode(selected)} />
@@ -1074,7 +1076,7 @@ export function SimulatorPanel({
               <StyledTextarea value={simulatorGoal} onChange={(event) => setSimulatorGoal(event.target.value)} placeholder="Unlimited approval (increaseAllowance type(uint256).max)" aria-label="Simulation goal" />
             </Field>
             <ControlButton type="submit" disabled={!activeAgent} className="w-full bg-[linear-gradient(135deg,#7C3AED,#4F46E5)] shadow-[0_18px_42px_rgba(91,33,182,0.26)]">
-              <TestTube2 className="h-4 w-4" />
+              <FlaskConical className="h-4 w-4" />
               Run Simulation
               <ArrowRight className="h-4 w-4" />
             </ControlButton>
@@ -1096,10 +1098,7 @@ export function SimulatorPanel({
                   <p className="mt-1 text-[15px] text-slate-400">{simulatorResult?.reason ?? "Run a dry simulation to inspect policy outcome."}</p>
                 </div>
               </div>
-              <div className="grid place-items-center rounded-full border border-violet-300/18 bg-violet-500/8 p-5 text-center">
-                <div className="text-[30px] font-semibold text-white">{simulatorResult ? "98%" : "--"}</div>
-                <div className="text-[12px] text-slate-400">Confidence</div>
-              </div>
+              <HeroCore variant="radar" label="Confidence" value={simulatorResult ? "98%" : "--"} className="min-h-[180px]" />
             </div>
           </div>
 
@@ -1355,7 +1354,9 @@ function ReceiptsMiniTable({
       ) : (
         <div className="grid min-h-[190px] place-items-center rounded-xl border border-white/[0.08] bg-[#071127]/66 text-center">
           <div>
-            <ShieldCheck className="mx-auto h-12 w-12 text-violet-200 drop-shadow-[0_0_18px_rgba(168,85,247,0.8)]" />
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-violet-200">
+              <ReceiptText className="h-6 w-6" />
+            </div>
             <div className="mt-3 font-medium text-white">{emptyTitle}</div>
             <div className="mt-1 text-[14px] text-slate-500">{emptyBody}</div>
           </div>

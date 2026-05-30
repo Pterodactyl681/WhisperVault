@@ -1,7 +1,8 @@
 "use client";
 
-import type { ButtonHTMLAttributes, CSSProperties, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
-import { ArrowRight, CheckCircle2, CircleDot, Copy, ExternalLink, Loader2, LogOut, Network, ShieldCheck, Sparkles, Wallet } from "lucide-react";
+import { Children, isValidElement, useEffect, useMemo, useRef, useState } from "react";
+import type { ButtonHTMLAttributes, ChangeEvent, CSSProperties, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import { ArrowRight, CheckCircle2, ChevronDown, CircleDot, Copy, ExternalLink, Loader2, LogOut, Network, ShieldCheck, Sparkles, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formControlClass } from "./constants";
 import { percentOf, statusTone } from "./utils";
@@ -9,7 +10,7 @@ import type { Notice } from "./types";
 
 export function Panel({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <section className={cn("min-w-0 rounded-xl border border-white/[0.08] bg-[#081325]/78 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.035),0_20px_70px_rgba(0,0,0,0.28)] backdrop-blur-xl", className)}>
+    <section className={cn("min-w-0 rounded-2xl border border-slate-700/60 bg-gradient-to-br from-slate-900/70 via-slate-950/60 to-slate-950/90 p-5 shadow-[0_0_40px_rgba(124,58,237,0.08)] backdrop-blur-xl", className)}>
       {children}
     </section>
   );
@@ -203,7 +204,7 @@ export function ControlButton({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { asAnchor?: boolean; href?: string }) {
   const baseClassName = cn(
-    "smooth-control inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-lg border border-violet-300/18 bg-[#10182E] px-4 text-center text-[15px] font-medium text-violet-100 hover:border-violet-300/38 hover:bg-violet-500/12 focus-visible:border-violet-400/65 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(139,92,246,0.16)] disabled:cursor-not-allowed disabled:border-white/[0.08] disabled:bg-white/[0.04] disabled:text-slate-400 disabled:opacity-85 sm:w-auto",
+    "smooth-control inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-slate-700/70 bg-slate-950/50 px-4 text-center text-[15px] font-medium text-slate-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] hover:border-violet-300/38 hover:bg-violet-500/12 focus-visible:border-violet-400/65 focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(139,92,246,0.16)] disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800/70 disabled:text-slate-400 disabled:opacity-55 sm:w-auto",
     className
   );
 
@@ -238,7 +239,7 @@ export function HeaderWalletButton({
       type="button"
       onClick={onClick}
       disabled={connecting}
-      className="smooth-control inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-violet-300/30 bg-[linear-gradient(135deg,#6D28D9,#4F46E5)] px-4 text-[15px] font-semibold text-white shadow-[0_16px_42px_rgba(91,33,182,0.30)] hover:border-violet-200/55 hover:shadow-[0_18px_46px_rgba(124,58,237,0.36)] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(139,92,246,0.20)] disabled:cursor-not-allowed disabled:opacity-85 sm:w-auto"
+      className="smooth-control inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-violet-300/35 bg-[linear-gradient(135deg,#7C3AED,#4F46E5)] px-4 text-[15px] font-semibold text-white shadow-[0_16px_42px_rgba(91,33,182,0.26)] hover:border-violet-200/55 hover:shadow-[0_18px_46px_rgba(124,58,237,0.32)] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_rgba(139,92,246,0.20)] disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800/70 disabled:text-slate-400 disabled:opacity-55 sm:w-auto"
     >
       {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
       {connected ? "Disconnect wallet" : connecting ? "Connecting" : "Connect wallet"}
@@ -260,7 +261,98 @@ export function StyledTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement
 }
 
 export function StyledSelect(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...props} className={cn(formControlClass, "appearance-none pr-9", props.className)} />;
+  const { children, className, value, defaultValue, onChange, disabled, name, id, "aria-label": ariaLabel } = props;
+  const [open, setOpen] = useState(false);
+  const [internalValue, setInternalValue] = useState(() => String(value ?? defaultValue ?? ""));
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const options = useMemo(
+    () =>
+      Children.toArray(children)
+        .filter(isValidElement)
+        .map((child) => {
+          const childProps = child.props as { value?: string; children?: ReactNode; disabled?: boolean };
+          return {
+            value: String(childProps.value ?? ""),
+            label: Children.toArray(childProps.children).join(""),
+            disabled: Boolean(childProps.disabled)
+          };
+        }),
+    [children]
+  );
+  const selectedValue = String(value ?? internalValue);
+  const selectedOption = options.find((option) => option.value === selectedValue) ?? options[0];
+
+  useEffect(() => {
+    if (value !== undefined) {
+      setInternalValue(String(value));
+    }
+  }, [value]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const chooseValue = (nextValue: string) => {
+    setInternalValue(nextValue);
+    setOpen(false);
+    onChange?.({
+      target: { value: nextValue, name },
+      currentTarget: { value: nextValue, name }
+    } as unknown as ChangeEvent<HTMLSelectElement>);
+  };
+
+  return (
+    <div ref={rootRef} className={cn("relative", className)}>
+      {name ? <input type="hidden" name={name} value={selectedValue} /> : null}
+      <button
+        id={id}
+        type="button"
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+        className={cn(formControlClass, "flex items-center justify-between gap-3 text-left")}
+      >
+        <span className={cn("truncate", selectedOption?.value ? "text-slate-100" : "text-slate-400")}>{selectedOption?.label ?? "Select"}</span>
+        <ChevronDown className={cn("h-4 w-4 shrink-0 text-violet-200/80 transition-transform", open ? "rotate-180" : "")} />
+      </button>
+      {open ? (
+        <div
+          role="listbox"
+          className="absolute z-40 mt-2 max-h-72 w-full overflow-auto rounded-xl border border-violet-300/35 bg-[#071121]/98 p-1.5 shadow-[0_18px_44px_rgba(0,0,0,0.42),0_0_0_1px_rgba(255,255,255,0.03)] backdrop-blur-xl"
+        >
+          {options.map((option) => {
+            const active = option.value === selectedValue;
+            return (
+              <button
+                key={option.value || option.label}
+                type="button"
+                role="option"
+                aria-selected={active}
+                disabled={option.disabled}
+                onClick={() => chooseValue(option.value)}
+                className={cn(
+                  "flex min-h-10 w-full items-center rounded-lg px-3 text-left text-[15px] transition-colors",
+                  active ? "bg-violet-500/18 text-violet-100" : "text-slate-300 hover:bg-white/[0.06] hover:text-white",
+                  option.disabled ? "cursor-not-allowed opacity-45" : ""
+                )}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -353,9 +445,9 @@ export function GlowPanel({
   return (
     <section
       className={cn(
-        "relative min-w-0 overflow-hidden rounded-xl border border-white/[0.075] bg-[linear-gradient(145deg,rgba(9,18,36,0.88),rgba(4,9,20,0.84))] shadow-[inset_0_1px_0_rgba(255,255,255,0.045),0_22px_72px_rgba(0,0,0,0.30)] backdrop-blur-xl",
+        "relative min-w-0 overflow-hidden rounded-2xl border border-slate-700/60 bg-gradient-to-br from-slate-900/70 via-slate-950/60 to-slate-950/90 shadow-[0_0_40px_rgba(124,58,237,0.08)] backdrop-blur-xl",
         "before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_18%_0%,rgba(124,58,237,0.13),transparent_34%),radial-gradient(circle_at_90%_10%,rgba(59,130,246,0.08),transparent_28%)] before:opacity-70",
-        intensity === "strong" ? "border-violet-300/18 shadow-[inset_0_1px_0_rgba(255,255,255,0.055),0_26px_82px_rgba(0,0,0,0.36),0_0_46px_rgba(91,33,182,0.12)] before:opacity-100" : "",
+        intensity === "strong" ? "border-violet-300/20 shadow-[0_0_54px_rgba(124,58,237,0.14),0_22px_72px_rgba(0,0,0,0.32)] before:opacity-100" : "",
         intensity === "quiet" ? "before:opacity-35" : "",
         className
       )}
@@ -379,17 +471,17 @@ export function StatCard({
   tone?: "violet" | "blue" | "emerald" | "amber" | "red";
 }) {
   const toneClasses = {
-    violet: "bg-violet-500/12 text-violet-200",
-    blue: "bg-blue-500/10 text-blue-200",
-    emerald: "bg-emerald-500/10 text-emerald-200",
-    amber: "bg-amber-500/10 text-amber-200",
-    red: "bg-red-500/10 text-red-200"
+    violet: "border-white/10 bg-white/[0.04] text-violet-200",
+    blue: "border-blue-300/20 bg-blue-500/10 text-blue-200",
+    emerald: "border-emerald-300/20 bg-emerald-500/10 text-emerald-200",
+    amber: "border-amber-300/22 bg-amber-500/10 text-amber-200",
+    red: "border-red-300/22 bg-red-500/10 text-red-200"
   }[tone];
 
   return (
     <GlowPanel className="p-4" intensity="quiet">
       <div className="flex min-w-0 items-center gap-4">
-        <div className={cn("grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-white/9", toneClasses)}>
+        <div className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-xl border", toneClasses)}>
           {icon}
         </div>
         <div className="min-w-0">
@@ -430,7 +522,7 @@ export function StatusPill({ icon, label, className }: { icon: ReactNode; label:
   return (
     <div
       className={cn(
-        "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-white/[0.08] bg-[#081325]/78 px-4 text-[14px] font-medium text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] backdrop-blur-xl",
+        "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-700/60 bg-slate-950/50 px-4 text-[14px] font-medium text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] backdrop-blur-xl",
         className
       )}
     >
@@ -458,26 +550,30 @@ export function HeroCore({
   value,
   className
 }: {
-  variant?: "star" | "shield" | "orb" | "cube" | "document";
+  variant?: "star" | "shield" | "orb" | "cube" | "document" | "pipeline" | "radar";
   label?: string;
   value?: string;
   className?: string;
 }) {
-  const isShield = variant === "shield";
   const isCube = variant === "cube";
   const isOrb = variant === "orb";
   const isDocument = variant === "document";
+  const isPipeline = variant === "pipeline";
+  const isRadar = variant === "radar";
+  const isShield = variant === "shield";
   return (
     <div className={cn("relative grid min-h-[260px] place-items-center overflow-hidden", className)} aria-hidden="true">
       <div className="hero-core-aura absolute inset-0" />
-      <div className="absolute bottom-8 h-10 w-64 rounded-full border border-violet-300/22 bg-violet-500/8 blur-[1px] shadow-[0_0_42px_rgba(124,58,237,0.32)]" />
-      <div className="absolute h-60 w-60 rounded-full border border-violet-200/12" />
-      <div className="absolute h-72 w-72 rotate-12 rounded-full border border-blue-200/8" />
+      <div className="absolute bottom-8 h-10 w-64 rounded-full border border-violet-300/16 bg-violet-500/8 blur-[1px] shadow-[0_0_42px_rgba(124,58,237,0.22)]" />
+      <div className="hero-orbit absolute h-60 w-60 rounded-full border border-violet-200/12" />
+      <div className="hero-orbit absolute h-72 w-72 rotate-12 rounded-full border border-blue-200/8 [animation-delay:-2.4s]" />
       <div className="absolute h-40 w-40 rounded-full border border-violet-200/14 shadow-[0_0_42px_rgba(124,58,237,0.12)]" />
       <div className="relative grid place-items-center">
         {isShield ? (
-          <div className="grid h-44 w-44 place-items-center rounded-full border border-violet-200/18 bg-[radial-gradient(circle_at_50%_42%,rgba(124,58,237,0.20),rgba(5,10,25,0.55)_62%,transparent_72%)]">
-            <ShieldCheck className="h-28 w-28 text-violet-100 drop-shadow-[0_0_22px_rgba(167,139,250,0.55)]" strokeWidth={1.15} />
+          <div className="hero-shield-field relative h-48 w-48">
+            <span className="absolute inset-8 rounded-[34%_34%_44%_44%/26%_26%_60%_60%] border border-violet-200/28 bg-[linear-gradient(160deg,rgba(124,58,237,0.22),rgba(14,165,233,0.08)_48%,rgba(2,6,23,0.62))] shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_0_34px_rgba(124,58,237,0.22)]" />
+            <span className="absolute inset-x-12 top-16 h-px bg-violet-200/50" />
+            <span className="absolute inset-x-14 top-24 h-px bg-blue-200/30" />
           </div>
         ) : isCube ? (
           <div className="agent-vault-core">
@@ -500,15 +596,40 @@ export function HeroCore({
             </div>
           </div>
         ) : isDocument ? (
-          <div className="grid h-36 w-28 place-items-center rounded-xl border border-violet-200/28 bg-[linear-gradient(145deg,rgba(124,58,237,0.20),rgba(15,23,42,0.78))] shadow-[0_22px_55px_rgba(0,0,0,0.32),0_0_34px_rgba(124,58,237,0.20)]">
+          <div className="grid h-40 w-32 place-items-center rounded-2xl border border-violet-200/28 bg-[linear-gradient(145deg,rgba(124,58,237,0.18),rgba(15,23,42,0.78))] shadow-[0_22px_55px_rgba(0,0,0,0.32),0_0_34px_rgba(124,58,237,0.20)]">
             <div className="space-y-3">
               <span className="block h-2 w-14 rounded-full bg-violet-200/70" />
               <span className="block h-2 w-20 rounded-full bg-violet-200/50" />
               <span className="block h-2 w-12 rounded-full bg-violet-200/40" />
             </div>
           </div>
+        ) : isPipeline ? (
+          <div className="relative h-36 w-64">
+            <span className="absolute left-8 right-8 top-1/2 h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-violet-200/55 to-transparent" />
+            {[0, 1, 2].map((item) => (
+              <span
+                key={item}
+                className="absolute top-1/2 grid h-16 w-16 -translate-y-1/2 place-items-center rounded-2xl border border-violet-200/22 bg-[#071121]/80 shadow-[0_0_30px_rgba(124,58,237,0.20)]"
+                style={{ left: `${item * 96}px` }}
+              >
+                <span className="h-3 w-3 rounded-full bg-violet-200 shadow-[0_0_20px_rgba(196,181,253,0.86)]" />
+              </span>
+            ))}
+          </div>
+        ) : isRadar ? (
+          <div className="hero-radar relative grid h-56 w-56 place-items-center rounded-full border border-emerald-200/16 bg-[radial-gradient(circle,rgba(16,185,129,0.18),rgba(2,6,23,0.58)_62%,transparent_72%)]">
+            <span className="absolute inset-8 rounded-full border border-emerald-200/14" />
+            <span className="absolute inset-16 rounded-full border border-emerald-200/12" />
+            <span className="hero-radar-sweep absolute h-1/2 w-px origin-bottom bg-gradient-to-t from-emerald-200/70 to-transparent" />
+            <span className="h-3 w-3 rounded-full bg-emerald-200 shadow-[0_0_22px_rgba(110,231,183,0.8)]" />
+          </div>
         ) : (
-          <Sigil className="h-40 w-40 drop-shadow-[0_0_28px_rgba(168,85,247,0.58)]" />
+          <div className="hero-star-core relative grid h-44 w-44 place-items-center">
+            <span className="absolute h-36 w-36 rounded-full border border-violet-200/14" />
+            <span className="absolute h-20 w-20 rounded-full bg-[radial-gradient(circle,#f5d8ff_0%,#a78bfa_34%,rgba(124,58,237,0.22)_62%,transparent_72%)] shadow-[0_0_52px_rgba(167,139,250,0.46)]" />
+            <span className="absolute h-px w-40 bg-gradient-to-r from-transparent via-violet-100/70 to-transparent" />
+            <span className="absolute h-40 w-px bg-gradient-to-b from-transparent via-violet-100/60 to-transparent" />
+          </div>
         )}
         {!isOrb && (label || value) ? (
           <div className="absolute text-center">

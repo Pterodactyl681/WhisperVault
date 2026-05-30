@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { BookOpenText, Gauge, Github, Home, ReceiptText, Settings, ShieldCheck, Sparkles, Swords, UsersRound } from "lucide-react";
+import { BookOpenText, Bot, FlaskConical, Github, LayoutDashboard, ReceiptText, Settings, ShieldCheck, Sparkles, Workflow } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DOCS_URL, GITHUB_URL } from "./constants";
 import type { CommandCenterAgent, CommandCenterReceipt, CommandCenterRecipient, GeneratedAgentTokenState, Notice, SectionId, SimulatorResult, SpendResult } from "./types";
@@ -9,14 +9,14 @@ import { AgentsSection, AllowanceSection, ExecutionsSection, FirewallSection, Ov
 import { LoadingStrip, NoticeBanner, SidebarFooterLink, Sigil, StatusPill, TopStatusBar } from "./ui";
 import { CommandCenterModals } from "./Modals";
 
-const navItems: { id: SectionId; label: string; icon: typeof Home }[] = [
-  { id: "overview", label: "Overview", icon: Home },
+const navItems: { id: SectionId; label: string; icon: typeof LayoutDashboard }[] = [
+  { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "allowance", label: "Ghost Allowance", icon: Sparkles },
   { id: "firewall", label: "Firewall", icon: ShieldCheck },
-  { id: "executions", label: "Executions", icon: Swords },
+  { id: "executions", label: "Executions", icon: Workflow },
   { id: "receipts", label: "Receipts", icon: ReceiptText },
-  { id: "agents", label: "Agents", icon: UsersRound },
-  { id: "simulator", label: "Simulator", icon: Gauge },
+  { id: "agents", label: "Agents", icon: Bot },
+  { id: "simulator", label: "Simulator", icon: FlaskConical },
   { id: "settings", label: "Settings", icon: Settings }
 ];
 
