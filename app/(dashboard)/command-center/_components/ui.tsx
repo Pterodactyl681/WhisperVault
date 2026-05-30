@@ -327,7 +327,7 @@ export function StyledSelect(props: SelectHTMLAttributes<HTMLSelectElement>) {
       {open ? (
         <div
           role="listbox"
-          className="absolute z-40 mt-2 max-h-72 w-full overflow-auto rounded-xl border border-violet-300/35 bg-[#071121]/98 p-1.5 shadow-[0_18px_44px_rgba(0,0,0,0.42),0_0_0_1px_rgba(255,255,255,0.03)] backdrop-blur-xl"
+          className="absolute z-50 mt-2 max-h-72 w-full overflow-auto rounded-xl border border-violet-300/35 bg-[#070b1a] p-1.5 shadow-[0_22px_52px_rgba(0,0,0,0.58),0_0_0_1px_rgba(255,255,255,0.04)]"
         >
           {options.map((option) => {
             const active = option.value === selectedValue;
@@ -341,7 +341,7 @@ export function StyledSelect(props: SelectHTMLAttributes<HTMLSelectElement>) {
                 onClick={() => chooseValue(option.value)}
                 className={cn(
                   "flex min-h-10 w-full items-center rounded-lg px-3 text-left text-[15px] transition-colors",
-                  active ? "bg-violet-500/18 text-violet-100" : "text-slate-300 hover:bg-white/[0.06] hover:text-white",
+                  active ? "text-white" : "text-slate-300 hover:bg-white/[0.06] hover:text-white",
                   option.disabled ? "cursor-not-allowed opacity-45" : ""
                 )}
               >
@@ -480,12 +480,12 @@ export function StatCard({
 
   return (
     <GlowPanel className="p-4" intensity="quiet">
-      <div className="flex min-w-0 items-center gap-4">
-        <div className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-xl border", toneClasses)}>
+      <div className="flex min-w-0 items-center gap-3">
+        <div className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-xl border", toneClasses)}>
           {icon}
         </div>
         <div className="min-w-0">
-          <div className="text-[14px] text-slate-400">{label}</div>
+          <div className="truncate whitespace-nowrap text-[13px] text-slate-400" title={label}>{label}</div>
           <div className="mt-1 truncate text-[28px] font-semibold leading-none text-white" title={value}>
             {value}
           </div>

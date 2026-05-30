@@ -96,16 +96,10 @@ const receiptAmountTotal = (receipts: CommandCenterReceipt[]): number =>
 const activePolicyCount = (agent: CommandCenterAgent | null, recipients: CommandCenterRecipient[] = []): number =>
   (agent ? 3 : 1) + (recipients.some((recipient) => recipient.isAllowedForActiveAgent) ? 1 : 0);
 
-function TokenControl({ value = "USDC", label = "Fixed token" }: { value?: string; label?: string }) {
+function TokenControl({ value = "USDC" }: { value?: string; label?: string }) {
   return (
-    <div className="flex h-12 w-full min-w-0 items-center justify-between rounded-xl border border-slate-700/70 bg-[#06111f]/80 px-3 text-[16px] text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
-      <span className="inline-flex min-w-0 items-center gap-2">
-        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-violet-300/24 bg-violet-500/12 text-[11px] font-semibold text-violet-100">
-          $
-        </span>
-        <span className="truncate font-medium">{value}</span>
-      </span>
-      <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[12px] text-slate-400">{label}</span>
+    <div className="flex h-12 w-full min-w-0 items-center rounded-xl border border-slate-700/70 bg-[#06111f]/80 px-3 text-[16px] font-medium uppercase text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+      <span className="truncate">{value}</span>
     </div>
   );
 }
@@ -621,7 +615,7 @@ export function ExecutionsSection({
                 <StyledInput value={spendAmount} onChange={(event) => setSpendAmount(event.target.value)} placeholder="12.50" inputMode="decimal" aria-label="Spend amount" />
               </Field>
               <Field label="Token">
-                <TokenControl value={spendMint || "USDC"} />
+                <TokenControl value="USDC" />
               </Field>
             </div>
             <Field label="Recipient">
@@ -664,7 +658,7 @@ export function ExecutionsSection({
               <div className="space-y-3">
                 <MetricRow label="From (Agent Wallet)" value={compactAddress(activeAgent?.id)} />
                 <MetricRow label="To (Recipient)" value={compactAddress(spendRecipient || activeAgent?.defaultRecipientAddress)} />
-                <MetricRow label="Amount" value={`${spendAmount || "0"} ${spendMint || "USDC"}`} />
+                <MetricRow label="Amount" value={`${spendAmount || "0"} USDC`} />
                 <MetricRow label="Primary Rail" value={formatRail(activeAgent?.executionMode)} />
                 <MetricRow label="Status" value={spendResult?.status ?? spendResult?.decision ?? "Awaiting validation"} />
               </div>
@@ -874,10 +868,10 @@ export function AgentsSection({
   return (
     <div className="space-y-5">
       <PageHeader title="Agent Vaults" />
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_410px]">
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
         <div className="space-y-5">
           <GlowPanel className="p-5 sm:p-6" intensity="strong">
-            <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_320px] md:items-center">
+            <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_300px] md:items-center">
               <div>
                 <h2 className="text-[32px] font-semibold leading-tight text-white sm:text-[38px]">
                   Autonomous spending, under your <span className="text-violet-300">control.</span>
@@ -898,7 +892,7 @@ export function AgentsSection({
             </div>
           </GlowPanel>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard icon={<UsersRound className="h-5 w-5" />} label="Total Agents" value={String(agents.length)} detail="All time" />
             <StatCard icon={<CheckCircle2 className="h-5 w-5" />} label="Active Agents" value={String(agents.filter((agent) => agent.isActive).length)} detail="Currently active" tone="emerald" />
             <StatCard icon={<ShieldCheck className="h-5 w-5" />} label="Healthy Policies" value={String(agents.filter((agent) => agent.status !== "exhausted").length)} detail="No policy issues" tone="blue" />
@@ -1001,7 +995,9 @@ export function AgentTable({
           <option value="empty">Empty</option>
         </StyledSelect>
       </div>
-      <VaultTable agents={agents} isSubmitting={isSubmitting} useAgent={useAgent} />
+      <div className="mt-4">
+        <VaultTable agents={agents} isSubmitting={isSubmitting} useAgent={useAgent} />
+      </div>
     </GlowPanel>
   );
 }
@@ -1020,7 +1016,7 @@ export function VaultTable({ agents, isSubmitting, useAgent }: { agents: Command
   }
 
   return (
-    <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {agents.map((agent) => (
         <div key={agent.id} className="min-w-0 rounded-xl border border-white/[0.08] bg-[#071127]/74 p-4">
           <div className="flex h-full min-w-0 flex-col gap-4">
@@ -1169,7 +1165,7 @@ export function SimulatorPanel({
                 <StyledInput value={simulatorAmount} onChange={(event) => setSimulatorAmount(event.target.value)} placeholder="1,250" inputMode="decimal" aria-label="Simulation amount" />
               </Field>
               <Field label="Token">
-                <TokenControl value={simulatorMint || "USDC"} label="Sim token" />
+                <TokenControl value="USDC" />
               </Field>
             </div>
             <Field label="Recipient (Spender)">
