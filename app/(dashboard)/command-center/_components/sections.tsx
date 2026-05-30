@@ -5,18 +5,21 @@ import type { FormEvent, ReactNode } from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  BadgeInfo,
+  Bot,
+  Box,
   CheckCircle2,
   CircleDollarSign,
   Clock3,
   Copy,
   Database,
   ExternalLink,
-  Eye,
-  FileText,
   Filter,
   Gauge,
+  Globe2,
   KeyRound,
   Layers3,
+  Link2,
   LockKeyhole,
   Network,
   Pause,
@@ -28,12 +31,12 @@ import {
   Shield,
   ShieldCheck,
   ShieldX,
+  SlidersHorizontal,
   Sparkles,
   FlaskConical,
   UsersRound,
   Wallet,
   XCircle,
-  Zap
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TELEGRAM_REFERENCE_BOT_URL } from "./constants";
@@ -92,6 +95,93 @@ const receiptAmountTotal = (receipts: CommandCenterReceipt[]): number =>
 
 const activePolicyCount = (agent: CommandCenterAgent | null, recipients: CommandCenterRecipient[] = []): number =>
   (agent ? 3 : 1) + (recipients.some((recipient) => recipient.isAllowedForActiveAgent) ? 1 : 0);
+
+function TokenControl({ value = "USDC", label = "Fixed token" }: { value?: string; label?: string }) {
+  return (
+    <div className="flex h-12 w-full min-w-0 items-center justify-between rounded-xl border border-slate-700/70 bg-[#06111f]/80 px-3 text-[16px] text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+      <span className="inline-flex min-w-0 items-center gap-2">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-violet-300/24 bg-violet-500/12 text-[11px] font-semibold text-violet-100">
+          $
+        </span>
+        <span className="truncate font-medium">{value}</span>
+      </span>
+      <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[12px] text-slate-400">{label}</span>
+    </div>
+  );
+}
+
+function RecipientControl({
+  value,
+  onChange,
+  recipients,
+  defaultAddress,
+  ariaLabel
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  recipients: CommandCenterRecipient[];
+  defaultAddress?: string | null;
+  ariaLabel: string;
+}) {
+  const defaultLabel = defaultAddress ? `Active default - ${compactAddress(defaultAddress)}` : "Active agent default";
+
+  return (
+    <div className="space-y-2">
+      <StyledSelect value={value} onChange={(event) => onChange(event.target.value)} aria-label={ariaLabel}>
+        <option value="">{defaultLabel}</option>
+        {recipients.map((recipient) => (
+          <option key={recipient.label} value={recipient.address}>
+            {recipient.label} - {compactAddress(recipient.address)}
+          </option>
+        ))}
+      </StyledSelect>
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2 text-[12px] text-slate-500">
+        <span className="inline-flex min-w-0 items-center gap-2">
+          <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-violet-200" />
+          <span className="truncate">Allowlist control</span>
+        </span>
+        <span className="shrink-0">{recipients.length} saved</span>
+      </div>
+    </div>
+  );
+}
+
+function AgentVaultVisual() {
+  return (
+    <div className="relative grid min-h-[260px] place-items-center overflow-hidden rounded-2xl border border-white/[0.07] bg-[#06111f]/58">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_34%,rgba(124,58,237,0.22),transparent_36%),radial-gradient(circle_at_50%_76%,rgba(59,130,246,0.12),transparent_42%)]" />
+      <div className="absolute h-56 w-56 rounded-full border border-violet-200/12" />
+      <div className="absolute h-40 w-40 rotate-45 rounded-[2rem] border border-blue-200/10" />
+      <div className="agent-vault-core scale-[0.86]">
+        <div className="agent-vault-core__lid" />
+        <div className="agent-vault-core__face">
+          <span />
+          <span />
+        </div>
+      </div>
+      <div className="absolute bottom-6 flex items-center gap-2 rounded-full border border-violet-300/20 bg-slate-950/70 px-3 py-1.5 text-[12px] text-violet-100 shadow-[0_0_24px_rgba(124,58,237,0.18)]">
+        <LockKeyhole className="h-3.5 w-3.5" />
+        Policy-contained vault
+      </div>
+    </div>
+  );
+}
+
+function CompactEmptyMark() {
+  return (
+    <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-white/10 bg-white/[0.04] text-violet-200">
+      <Box className="h-7 w-7" />
+    </div>
+  );
+}
+
+function ConfigIcon({ icon }: { icon: ReactNode }) {
+  return (
+    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-violet-200 [&_svg]:h-5 [&_svg]:w-5">
+      {icon}
+    </div>
+  );
+}
 
 export function OverviewCards({
   activeAgent,
@@ -399,8 +489,16 @@ export function FirewallSection({
         <div className="space-y-4">
           <GlowPanel className="p-5" intensity="quiet">
             <PanelTitle>Firewall Summary</PanelTitle>
-            <div className="mt-5 grid gap-5 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center">
-              <HeroCore variant="shield" className="min-h-[190px]" />
+            <div className="mt-5 space-y-4">
+              <div className="flex items-center gap-4 rounded-xl border border-emerald-300/14 bg-emerald-500/8 p-4">
+                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl border border-emerald-300/20 bg-emerald-500/10 text-emerald-200">
+                  <ShieldCheck className="h-6 w-6" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[18px] font-semibold text-white">Strict protection active</div>
+                  <p className="mt-1 text-[13px] text-slate-500">Firewall rules are enabled for agent spend attempts.</p>
+                </div>
+              </div>
               <div className="space-y-3">
                 <MetricRow label="Firewall Status" value="Active" />
                 <MetricRow label="Protection Mode" value="Strict" />
@@ -481,7 +579,6 @@ export function ExecutionsSection({
   spendAmount,
   setSpendAmount,
   spendMint,
-  setSpendMint,
   spendGoal,
   setSpendGoal,
   spendRecipient,
@@ -523,19 +620,18 @@ export function ExecutionsSection({
               <Field label="Amount">
                 <StyledInput value={spendAmount} onChange={(event) => setSpendAmount(event.target.value)} placeholder="12.50" inputMode="decimal" aria-label="Spend amount" />
               </Field>
-              <Field label="Mint">
-                <StyledInput value={spendMint} onChange={(event) => setSpendMint(event.target.value)} placeholder="USDC" aria-label="Spend mint" />
+              <Field label="Token">
+                <TokenControl value={spendMint || "USDC"} />
               </Field>
             </div>
             <Field label="Recipient">
-              <StyledSelect value={spendRecipient} onChange={(event) => setSpendRecipient(event.target.value)} aria-label="Spend recipient">
-                <option value="" className="bg-[#080812] text-zinc-400">Active agent default</option>
-                {recipients.map((recipient) => (
-                  <option key={recipient.label} value={recipient.address} className="bg-[#080812] text-white">
-                    {recipient.label} - {compactAddress(recipient.address)}
-                  </option>
-                ))}
-              </StyledSelect>
+              <RecipientControl
+                value={spendRecipient}
+                onChange={setSpendRecipient}
+                recipients={recipients}
+                defaultAddress={activeAgent?.defaultRecipientAddress}
+                ariaLabel="Spend recipient"
+              />
             </Field>
             <Field label="Intent">
               <StyledTextarea value={spendGoal} onChange={(event) => setSpendGoal(event.target.value)} placeholder="Pay vendor for analytics dashboard subscription." aria-label="Spend goal" />
@@ -550,8 +646,21 @@ export function ExecutionsSection({
         <div className="space-y-5">
           <GlowPanel className="p-5 sm:p-6" intensity="quiet">
             <StepTitle step="2" title="Pending Execution / Preview" detail="Review the transaction that will be executed by your agent." />
-            <div className="mt-5 grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
-              <HeroCore variant="pipeline" className="min-h-[180px]" />
+            <div className="mt-5 grid gap-4 md:grid-cols-[minmax(0,0.82fr)_minmax(0,1fr)]">
+              <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-4">
+                <div className="flex items-center gap-3">
+                  <ConfigIcon icon={<Bot />} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] text-slate-500">Route</div>
+                    <div className="mt-1 truncate text-[15px] font-medium text-white">Agent to allowlisted recipient</div>
+                  </div>
+                </div>
+                <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center text-[12px] text-slate-500">
+                  <span className="truncate rounded-lg border border-white/[0.07] bg-[#06111f]/70 px-2 py-2">Agent</span>
+                  <ArrowRight className="h-4 w-4 text-violet-200" />
+                  <span className="truncate rounded-lg border border-white/[0.07] bg-[#06111f]/70 px-2 py-2">Recipient</span>
+                </div>
+              </div>
               <div className="space-y-3">
                 <MetricRow label="From (Agent Wallet)" value={compactAddress(activeAgent?.id)} />
                 <MetricRow label="To (Recipient)" value={compactAddress(spendRecipient || activeAgent?.defaultRecipientAddress)} />
@@ -765,27 +874,27 @@ export function AgentsSection({
   return (
     <div className="space-y-5">
       <PageHeader title="Agent Vaults" />
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_430px]">
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_410px]">
         <div className="space-y-5">
-        <GlowPanel className="p-6" intensity="strong">
-            <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_360px] md:items-center">
+          <GlowPanel className="p-5 sm:p-6" intensity="strong">
+            <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_320px] md:items-center">
               <div>
                 <h2 className="text-[32px] font-semibold leading-tight text-white sm:text-[38px]">
                   Autonomous spending, under your <span className="text-violet-300">control.</span>
                 </h2>
                 <p className="mt-4 max-w-xl text-[16px] leading-7 text-slate-400">Agent Vaults are controllable spending entities with their own allowances, firewall policies, and recipient rules.</p>
                 <div className="mt-6 grid gap-3 sm:flex">
-                  <ControlButton onClick={() => document.getElementById("agent-vault-name")?.focus()} className="bg-[linear-gradient(135deg,#7C3AED,#4F46E5)]">
+                  <ControlButton onClick={() => document.getElementById("agent-vault-name")?.focus()} className="w-auto whitespace-nowrap bg-[linear-gradient(135deg,#7C3AED,#4F46E5)] px-5">
                     <Plus className="h-4 w-4" />
                     Add Agent Vault
                   </ControlButton>
-                  <ControlButton asAnchor href="https://github.com/Pterodactyl681/WhisperVault#readme">
+                  <ControlButton asAnchor href="https://github.com/Pterodactyl681/WhisperVault#readme" className="w-auto whitespace-nowrap px-5">
                     Learn more
                     <ExternalLink className="h-4 w-4" />
                   </ControlButton>
                 </div>
               </div>
-              <HeroCore variant="cube" className="min-h-[250px]" />
+              <AgentVaultVisual />
             </div>
           </GlowPanel>
 
@@ -800,9 +909,9 @@ export function AgentsSection({
           {agents.length > 0 ? <ConnectAgentPanel agent={onboardingAgent} isSubmitting={isSubmitting} generatedAgentToken={generatedAgentToken} generateAgentToken={generateAgentToken} /> : null}
         </div>
 
-        <GlowPanel className="p-5 xl:sticky xl:top-6 xl:self-start" intensity="quiet">
+        <GlowPanel className="p-5 sm:p-6 xl:sticky xl:top-6 xl:self-start" intensity="quiet">
           <div className="mb-6 flex items-start gap-4">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-violet-500/10 text-violet-200">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-violet-200">
               <Plus className="h-6 w-6" />
             </div>
             <div>
@@ -834,7 +943,7 @@ export function AgentsSection({
             <Field label="Daily Allowance">
               <StyledInput value="0" readOnly aria-label="Daily allowance" />
             </Field>
-            <ControlButton type="submit" disabled={isSubmitting} className="w-full bg-[linear-gradient(135deg,#7C3AED,#4F46E5)] shadow-[0_0_30px_rgba(124,58,237,0.42)]">
+            <ControlButton type="submit" disabled={isSubmitting} className="w-full whitespace-nowrap bg-[linear-gradient(135deg,#7C3AED,#4F46E5)] px-5 shadow-[0_0_30px_rgba(124,58,237,0.30)]">
               <Plus className="h-4 w-4" />
               Create Agent Vault
             </ControlButton>
@@ -900,10 +1009,10 @@ export function AgentTable({
 export function VaultTable({ agents, isSubmitting, useAgent }: { agents: CommandCenterAgent[]; isSubmitting: boolean; useAgent: (agentId: string) => void }) {
   if (agents.length === 0) {
     return (
-      <div className="grid min-h-[360px] place-items-center text-center">
-        <div>
-          <HeroCore variant="cube" className="mx-auto min-h-[220px] max-w-md" />
-          <h3 className="text-[24px] font-semibold text-white">No agent vaults yet</h3>
+      <div className="grid min-h-[220px] place-items-center rounded-xl border border-dashed border-white/[0.10] bg-white/[0.025] p-8 text-center">
+        <div className="max-w-sm">
+          <CompactEmptyMark />
+          <h3 className="mt-4 text-[24px] font-semibold text-white">No agent vaults yet</h3>
           <p className="mt-2 text-[15px] text-slate-500">Create your first agent vault to automate spending with guardrails.</p>
         </div>
       </div>
@@ -1018,7 +1127,6 @@ export function SimulatorPanel({
   simulatorAmount,
   setSimulatorAmount,
   simulatorMint,
-  setSimulatorMint,
   simulatorGoal,
   setSimulatorGoal,
   simulatorRecipient,
@@ -1060,17 +1168,18 @@ export function SimulatorPanel({
               <Field label="Amount">
                 <StyledInput value={simulatorAmount} onChange={(event) => setSimulatorAmount(event.target.value)} placeholder="1,250" inputMode="decimal" aria-label="Simulation amount" />
               </Field>
-              <Field label="Mint">
-                <StyledInput value={simulatorMint} onChange={(event) => setSimulatorMint(event.target.value)} placeholder="USDC" aria-label="Simulation mint" />
+              <Field label="Token">
+                <TokenControl value={simulatorMint || "USDC"} label="Sim token" />
               </Field>
             </div>
             <Field label="Recipient (Spender)">
-              <StyledSelect value={simulatorRecipient} onChange={(event) => setSimulatorRecipient(event.target.value)} aria-label="Simulation recipient">
-                <option value="" className="bg-[#080812] text-zinc-400">Active agent default</option>
-                {recipients.map((recipient) => (
-                  <option key={recipient.label} value={recipient.address} className="bg-[#080812] text-white">{recipient.label} - {compactAddress(recipient.address)}</option>
-                ))}
-              </StyledSelect>
+              <RecipientControl
+                value={simulatorRecipient}
+                onChange={setSimulatorRecipient}
+                recipients={recipients}
+                defaultAddress={activeAgent?.defaultRecipientAddress}
+                ariaLabel="Simulation recipient"
+              />
             </Field>
             <Field label="Intent (What the spender is trying to do)">
               <StyledTextarea value={simulatorGoal} onChange={(event) => setSimulatorGoal(event.target.value)} placeholder="Unlimited approval (increaseAllowance type(uint256).max)" aria-label="Simulation goal" />
@@ -1086,7 +1195,7 @@ export function SimulatorPanel({
         <GlowPanel className="p-5" intensity="quiet">
           <PanelTitle>Simulation Result</PanelTitle>
           <div className="mt-5 rounded-xl border border-white/[0.08] bg-white/[0.045] p-5">
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_180px] lg:items-center">
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_190px] lg:items-center">
               <div className="flex items-center gap-4">
                 <div className={isBlocked ? "grid h-16 w-16 place-items-center rounded-2xl border border-red-300/28 bg-red-500/10 text-red-300" : "grid h-16 w-16 place-items-center rounded-2xl border border-emerald-300/24 bg-emerald-500/9 text-emerald-300"}>
                   {isBlocked ? <ShieldX className="h-9 w-9" /> : <ShieldCheck className="h-9 w-9" />}
@@ -1098,7 +1207,14 @@ export function SimulatorPanel({
                   <p className="mt-1 text-[15px] text-slate-400">{simulatorResult?.reason ?? "Run a dry simulation to inspect policy outcome."}</p>
                 </div>
               </div>
-              <HeroCore variant="radar" label="Confidence" value={simulatorResult ? "98%" : "--"} className="min-h-[180px]" />
+              <div className="grid place-items-center rounded-2xl border border-white/[0.08] bg-[#06111f]/70 p-4 text-center">
+                <div className={cn("grid h-24 w-24 place-items-center rounded-full border", simulatorResult ? "border-emerald-300/25 bg-emerald-500/10 text-emerald-200" : "border-slate-600/60 bg-slate-800/40 text-slate-400")}>
+                  <div>
+                    <div className="text-[28px] font-semibold leading-none">{simulatorResult ? "98%" : "--"}</div>
+                    <div className="mt-1 text-[11px] uppercase tracking-[0.12em]">confidence</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1203,7 +1319,7 @@ export function SettingsSection({
         <GlowPanel className="p-5" intensity="quiet">
           <div className="mb-5 flex items-center gap-4">
             <div className="grid h-12 w-12 place-items-center rounded-full bg-violet-500/16 text-violet-200">
-              <Gauge className="h-6 w-6" />
+              <SlidersHorizontal className="h-6 w-6" />
             </div>
             <div>
               <h2 className="text-[21px] font-semibold text-white">Application Configuration</h2>
@@ -1211,11 +1327,11 @@ export function SettingsSection({
             </div>
           </div>
           <div className="space-y-2">
-            <ConfigRow label="Network" detail="Current blockchain network" value="Solana Devnet" />
-            <ConfigRow label="App Mode" detail="Application operating mode" value="Demo" />
-            <ConfigRow label="API Base URL" detail="Backend service endpoint" value={typeof window === "undefined" ? "/" : window.location.origin} />
-            <ConfigRow label="Version" detail="Installed application version" value="0.1.0" />
-            <ConfigRow label="Controller" detail="Active controller wallet" value={compactAddress(controllerWallet)} />
+            <ConfigRow icon={<Globe2 />} label="Network" detail="Current blockchain network" value="Solana Devnet" />
+            <ConfigRow icon={<SlidersHorizontal />} label="App Mode" detail="Application operating mode" value="Demo" />
+            <ConfigRow icon={<Link2 />} label="API Base URL" detail="Backend service endpoint" value={typeof window === "undefined" ? "/" : window.location.origin} />
+            <ConfigRow icon={<BadgeInfo />} label="Version" detail="Installed application version" value="0.1.0" />
+            <ConfigRow icon={<Wallet />} label="Controller" detail="Active controller wallet" value={compactAddress(controllerWallet)} />
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <ControlButton onClick={() => void resetDemoState()} disabled={isSubmitting} className="border-red-300/30 text-red-200">
@@ -1279,12 +1395,17 @@ export function SettingsSection({
         </GlowPanel>
       </div>
 
-      <GlowPanel className="p-5" intensity="strong">
-        <div className="grid gap-5 lg:grid-cols-[160px_minmax(0,1fr)] lg:items-center">
-          <HeroCore variant="shield" className="min-h-[170px]" />
+      <GlowPanel className="p-5" intensity="quiet">
+        <div className="grid gap-5 lg:grid-cols-[minmax(220px,0.34fr)_minmax(0,1fr)] lg:items-center">
+          <div className="flex items-center gap-4 rounded-xl border border-violet-300/14 bg-violet-500/8 p-4">
+            <ConfigIcon icon={<SlidersHorizontal />} />
+            <div className="min-w-0">
+              <div className="text-[15px] font-semibold text-white">Configuration Insights</div>
+              <p className="mt-1 text-[13px] text-slate-500">Current runtime and recipient readiness.</p>
+            </div>
+          </div>
           <div>
-            <PanelTitle>Configuration Insights</PanelTitle>
-            <div className="mt-4 grid gap-3 md:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-4">
               <SoftMetric label="Network Status" value="Connected" />
               <SoftMetric label="API Health" value="200 OK" />
               <SoftMetric label="Configuration" value={tab === "docs" ? "Docs linked" : "Valid"} />
@@ -1297,12 +1418,10 @@ export function SettingsSection({
   );
 }
 
-function ConfigRow({ label, detail, value }: { label: string; detail: string; value: string }) {
+function ConfigRow({ icon, label, detail, value }: { icon: ReactNode; label: string; detail: string; value: string }) {
   return (
     <div className="flex items-center gap-4 rounded-lg border border-white/[0.07] bg-white/[0.035] p-4">
-      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-violet-500/14 text-violet-200">
-        <Gauge className="h-5 w-5" />
-      </div>
+      <ConfigIcon icon={icon} />
       <div className="min-w-0 flex-1">
         <div className="font-medium text-white">{label}</div>
         <div className="text-[13px] text-slate-500">{detail}</div>
