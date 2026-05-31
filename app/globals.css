@@ -124,54 +124,6 @@ body {
   opacity: 0.26;
 }
 
-.hero-core-aura {
-  background:
-    radial-gradient(circle at 50% 48%, rgba(124, 58, 237, 0.16), transparent 36%),
-    radial-gradient(circle at 50% 72%, rgba(59, 130, 246, 0.06), transparent 24%);
-}
-
-.agent-vault-core {
-  position: relative;
-  width: 9rem;
-  height: 9rem;
-  transform: rotateX(58deg) rotateZ(45deg);
-  transform-style: preserve-3d;
-  filter: drop-shadow(0 22px 32px rgba(0, 0, 0, 0.34)) drop-shadow(0 0 18px rgba(124, 58, 237, 0.18));
-}
-
-.agent-vault-core__lid,
-.agent-vault-core__face {
-  position: absolute;
-  inset: 0;
-  border: 1px solid rgba(221, 214, 254, 0.34);
-  border-radius: 24px;
-  background: linear-gradient(145deg, rgba(139, 92, 246, 0.36), rgba(15, 23, 42, 0.88) 68%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
-}
-
-.agent-vault-core__lid {
-  transform: translateZ(36px);
-}
-
-.agent-vault-core__face {
-  display: grid;
-  place-items: center;
-  transform: translateZ(4px);
-}
-
-.agent-vault-core__face span {
-  position: absolute;
-  width: 44%;
-  height: 2px;
-  border-radius: 999px;
-  background: rgba(221, 214, 254, 0.52);
-  box-shadow: 0 0 18px rgba(167, 139, 250, 0.32);
-}
-
-.agent-vault-core__face span:nth-child(1) {
-  transform: rotate(90deg);
-}
-
 .dashboard-nav-scroll {
   scrollbar-width: none;
 }
@@ -628,75 +580,6 @@ body {
   }
 }
 
-@keyframes hero-core-breathe {
-  0% {
-    opacity: 0.62;
-    transform: scale(0.98);
-  }
-  50% {
-    opacity: 0.86;
-    transform: scale(1.03);
-  }
-  100% {
-    opacity: 0.62;
-    transform: scale(0.98);
-  }
-}
-
-.hero-orbit {
-  animation: none;
-}
-
-.hero-star-core {
-  animation: none;
-}
-
-.hero-shield-field {
-  filter: drop-shadow(0 0 18px rgba(124, 58, 237, 0.12));
-  animation: none;
-}
-
-.hero-radar {
-  box-shadow: inset 0 0 34px rgba(16, 185, 129, 0.08), 0 0 42px rgba(16, 185, 129, 0.12);
-}
-
-.hero-radar-sweep {
-  animation: hero-radar-sweep 4.8s linear infinite;
-}
-
-@keyframes hero-orbit-drift {
-  0% {
-    transform: rotate(0deg) scale(1);
-  }
-  50% {
-    transform: rotate(8deg) scale(1.025);
-  }
-  100% {
-    transform: rotate(0deg) scale(1);
-  }
-}
-
-@keyframes hero-shield-pulse {
-  0%,
-  100% {
-    opacity: 0.82;
-    transform: translateY(0);
-  }
-  50% {
-    opacity: 1;
-    transform: translateY(-4px);
-  }
-}
-
-@keyframes hero-radar-sweep {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @keyframes tab-slide-fade-forward {
   0% {
     opacity: 0;
@@ -947,19 +830,11 @@ body {
   }
 
   .command-center-shell::before,
-  .command-center-shell::after,
-  .hero-core-aura {
+  .command-center-shell::after {
     animation: none;
   }
 
   .agent-vault-edge::before {
-    animation: none;
-  }
-
-  .hero-orbit,
-  .hero-star-core,
-  .hero-shield-field,
-  .hero-radar-sweep {
     animation: none;
   }
 

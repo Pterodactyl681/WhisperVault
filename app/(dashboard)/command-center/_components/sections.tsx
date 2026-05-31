@@ -68,13 +68,13 @@ import {
   sumReceiptAmounts
 } from "./utils";
 import {
+  AllowanceRing,
   ControlButton,
   DataTableShell,
   EmptyState,
   ExplorerLink,
   Field,
   GlowPanel,
-  HeroCore,
   MetricRow,
   PageHeader,
   PanelTitle,
@@ -87,6 +87,7 @@ import {
   Timeline,
   ValidationChecklist
 } from "./ui";
+import { ProductVisual } from "@/components/ui/product-visual";
 
 const kpiFormat = (value: number): string => (Number.isInteger(value) ? String(value) : value.toFixed(2));
 
@@ -140,38 +141,10 @@ function RecipientControl({
   );
 }
 
-function AgentVaultVisual() {
-  return (
-    <div className="relative grid min-h-[260px] place-items-center overflow-hidden rounded-2xl border border-white/[0.07] bg-[#06111f]/70">
-      <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(124,58,237,0.12),transparent_48%)]" />
-      <div className="absolute h-52 w-52 rotate-45 rounded-[2rem] border border-slate-400/12" />
-      <div className="agent-vault-core scale-[0.86]">
-        <div className="agent-vault-core__lid" />
-        <div className="agent-vault-core__face">
-          <span />
-          <span />
-        </div>
-      </div>
-      <div className="absolute bottom-6 flex items-center gap-2 rounded-full border border-violet-300/18 bg-slate-950/74 px-3 py-1.5 text-[12px] text-violet-100">
-        <LockKeyhole className="h-3.5 w-3.5" />
-        Policy-contained vault
-      </div>
-    </div>
-  );
-}
-
 function CompactEmptyMark() {
   return (
     <div className="mx-auto grid h-11 w-11 place-items-center rounded-xl border border-white/10 bg-white/[0.035] text-violet-200">
       <Box className="h-5 w-5" />
-    </div>
-  );
-}
-
-function CompactReceiptMark() {
-  return (
-    <div className="mx-auto grid h-11 w-11 place-items-center rounded-xl border border-white/10 bg-white/[0.035] text-violet-200">
-      <ReceiptText className="h-5 w-5" />
     </div>
   );
 }
@@ -223,7 +196,10 @@ export function OverviewCards({
               </ControlButton>
             </div>
           </div>
-          <HeroCore variant="star" className="min-h-[320px] lg:min-h-[390px]" />
+          <div className="relative grid min-h-[260px] place-items-center overflow-hidden rounded-2xl border border-white/[0.07] bg-[#06111f]/54 p-6 sm:min-h-[320px] lg:min-h-[360px]">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_46%,rgba(124,58,237,0.16),transparent_48%)]" />
+            <ProductVisual kind="overview" size="lg" />
+          </div>
         </div>
       </GlowPanel>
 
@@ -356,11 +332,15 @@ export function AllowanceSection({
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Ghost Allowance" subtitle="Live private allowance trust for the active session." />
+      <PageHeader title="Ghost Allowance" subtitle="Live private allowance trust for the active session.">
+        <ProductVisual kind="ghost" size="sm" className="hidden md:flex" />
+      </PageHeader>
       <GlowPanel className="p-5 lg:p-7" intensity="strong">
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(380px,0.72fr)]">
           <div className="relative rounded-xl border border-white/[0.08] bg-[#061026]/58 p-5">
-            <HeroCore variant="orb" label="Live Allowance" value={current} className="min-h-[430px]" />
+            <div className="grid min-h-[390px] place-items-center">
+              <AllowanceRing current={current} max={activeAgent?.ghostAllowanceMax ?? "0"} sizeClassName="h-72 w-72 sm:h-80 sm:w-80" large />
+            </div>
             <div className="grid gap-3 sm:grid-cols-4">
               <ControlButton disabled title="No open endpoint is exposed in the web API." className="bg-[linear-gradient(135deg,#7C3AED,#4F46E5)]">
                 <Play className="h-4 w-4" />
@@ -467,7 +447,10 @@ export function FirewallSection({
               <MiniMetric icon={<CheckCircle2 />} label="System Trust" value="High" tone="emerald" />
             </div>
           </div>
-          <HeroCore variant="shield" className="min-h-[300px]" />
+          <div className="relative grid min-h-[260px] place-items-center overflow-hidden rounded-2xl border border-white/[0.07] bg-[#06111f]/54 p-6 lg:min-h-[300px]">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_46%,rgba(16,185,129,0.12),rgba(124,58,237,0.10)_42%,transparent_68%)]" />
+            <ProductVisual kind="firewall" size="lg" />
+          </div>
         </div>
       </GlowPanel>
 
@@ -648,7 +631,8 @@ export function ExecutionsSection({
           <GlowPanel className="p-5 sm:p-6" intensity="quiet">
             <StepTitle step="2" title="Pending Execution / Preview" detail="Review the transaction that will be executed by your agent." />
             <div className="mt-5 grid gap-4 md:grid-cols-[minmax(0,0.82fr)_minmax(0,1fr)]">
-              <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-4">
+              <div className="relative overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.03] p-4">
+                <ProductVisual kind="executions" size="sm" className="absolute -right-3 -top-4 opacity-55" />
                 <div className="flex items-center gap-3">
                   <ConfigIcon icon={<Bot />} />
                   <div className="min-w-0 flex-1">
@@ -801,7 +785,7 @@ export function ReceiptsSection({ receipts }: { receipts: CommandCenterReceipt[]
             ) : (
               <div className="grid min-h-[220px] place-items-center rounded-xl border border-dashed border-white/[0.09] bg-white/[0.018] p-6 text-center">
                 <div className="max-w-sm">
-                  <CompactReceiptMark />
+                  <ProductVisual kind="receipts" size="sm" className="mx-auto" />
                   <h3 className="mt-4 text-[20px] font-semibold text-white">No receipts yet</h3>
                   <p className="mx-auto mt-2 text-[14px] leading-6 text-slate-500">Settlement receipts from confirmed executions will appear here.</p>
                 </div>
@@ -903,7 +887,14 @@ export function AgentsSection({
                   </ControlButton>
                 </div>
               </div>
-              <AgentVaultVisual />
+              <div className="relative grid min-h-[250px] place-items-center overflow-hidden rounded-2xl border border-white/[0.07] bg-[#06111f]/64 p-5">
+                <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(124,58,237,0.12),transparent_48%)]" />
+                <ProductVisual kind="agents" size="lg" className="opacity-85" />
+                <div className="absolute bottom-5 flex items-center gap-2 rounded-full border border-violet-300/18 bg-slate-950/74 px-3 py-1.5 text-[12px] text-violet-100">
+                  <LockKeyhole className="h-3.5 w-3.5" />
+                  Policy-contained vault
+                </div>
+              </div>
             </div>
           </GlowPanel>
 
@@ -1222,8 +1213,9 @@ export function SimulatorPanel({
                   <p className="mt-1 text-[15px] text-slate-400">{simulatorResult?.reason ?? "Run a dry simulation to inspect policy outcome."}</p>
                 </div>
               </div>
-              <div className="grid place-items-center rounded-2xl border border-white/[0.08] bg-[#06111f]/70 p-4 text-center">
-                <div className={cn("grid h-24 w-24 place-items-center rounded-full border", simulatorResult ? "border-emerald-300/25 bg-emerald-500/10 text-emerald-200" : "border-slate-600/60 bg-slate-800/40 text-slate-400")}>
+              <div className="relative grid min-h-[158px] place-items-center overflow-hidden rounded-2xl border border-white/[0.08] bg-[#06111f]/70 p-4 text-center">
+                <ProductVisual kind="simulator" size="md" className="absolute opacity-45" />
+                <div className={cn("relative grid h-24 w-24 place-items-center rounded-full border bg-slate-950/72 backdrop-blur-sm", simulatorResult ? "border-emerald-300/25 text-emerald-200" : "border-slate-600/60 text-slate-400")}>
                   <div>
                     <div className="text-[28px] font-semibold leading-none">{simulatorResult ? "98%" : "--"}</div>
                     <div className="mt-1 text-[11px] uppercase tracking-[0.12em]">confidence</div>
@@ -1412,9 +1404,12 @@ export function SettingsSection({
 
       <GlowPanel className="p-5" intensity="quiet">
         <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <PanelTitle>Configuration Insights</PanelTitle>
-            <p className="mt-2 text-[14px] text-slate-500">Current runtime and recipient readiness.</p>
+          <div className="flex min-w-0 items-center gap-4">
+            <ProductVisual kind="settings" size="sm" className="hidden shrink-0 sm:flex" />
+            <div className="min-w-0">
+              <PanelTitle>Configuration Insights</PanelTitle>
+              <p className="mt-2 text-[14px] text-slate-500">Current runtime and recipient readiness.</p>
+            </div>
           </div>
           <StatusBadge status="active">Healthy</StatusBadge>
         </div>
