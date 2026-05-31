@@ -333,7 +333,7 @@ export function AllowanceSection({
   return (
     <div className="space-y-5">
       <PageHeader title="Ghost Allowance" subtitle="Live private allowance trust for the active session.">
-        <ProductVisual kind="ghost" size="sm" className="hidden md:flex" />
+        <ProductVisual kind="ghost" size="lg" className="hidden md:flex" />
       </PageHeader>
       <GlowPanel className="p-5 lg:p-7" intensity="strong">
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(380px,0.72fr)]">
@@ -899,9 +899,9 @@ export function AgentsSection({
                   </ControlButton>
                 </div>
               </div>
-              <div className="relative grid min-h-[250px] place-items-center overflow-hidden rounded-2xl border border-white/[0.07] bg-[#06111f]/64 p-5">
+              <div className="relative grid min-h-[320px] place-items-center overflow-visible rounded-2xl border border-white/[0.07] bg-[#06111f]/64 p-5">
                 <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(124,58,237,0.12),transparent_48%)]" />
-                <ProductVisual kind="agents" size="hero" className="opacity-85" />
+                <ProductVisual kind="agents" size="hero" className="opacity-90" />
                 <div className="absolute bottom-5 flex items-center gap-2 rounded-full border border-violet-300/18 bg-slate-950/74 px-3 py-1.5 text-[12px] text-violet-100">
                   <LockKeyhole className="h-3.5 w-3.5" />
                   Policy-contained vault
