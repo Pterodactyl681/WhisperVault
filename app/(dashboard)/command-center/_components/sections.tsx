@@ -142,10 +142,9 @@ function RecipientControl({
 
 function AgentVaultVisual() {
   return (
-    <div className="relative grid min-h-[260px] place-items-center overflow-hidden rounded-2xl border border-white/[0.07] bg-[#06111f]/58">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_34%,rgba(124,58,237,0.22),transparent_36%),radial-gradient(circle_at_50%_76%,rgba(59,130,246,0.12),transparent_42%)]" />
-      <div className="absolute h-56 w-56 rounded-full border border-violet-200/12" />
-      <div className="absolute h-40 w-40 rotate-45 rounded-[2rem] border border-blue-200/10" />
+    <div className="relative grid min-h-[260px] place-items-center overflow-hidden rounded-2xl border border-white/[0.07] bg-[#06111f]/70">
+      <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(124,58,237,0.12),transparent_48%)]" />
+      <div className="absolute h-52 w-52 rotate-45 rounded-[2rem] border border-slate-400/12" />
       <div className="agent-vault-core scale-[0.86]">
         <div className="agent-vault-core__lid" />
         <div className="agent-vault-core__face">
@@ -153,7 +152,7 @@ function AgentVaultVisual() {
           <span />
         </div>
       </div>
-      <div className="absolute bottom-6 flex items-center gap-2 rounded-full border border-violet-300/20 bg-slate-950/70 px-3 py-1.5 text-[12px] text-violet-100 shadow-[0_0_24px_rgba(124,58,237,0.18)]">
+      <div className="absolute bottom-6 flex items-center gap-2 rounded-full border border-violet-300/18 bg-slate-950/74 px-3 py-1.5 text-[12px] text-violet-100">
         <LockKeyhole className="h-3.5 w-3.5" />
         Policy-contained vault
       </div>
@@ -163,8 +162,16 @@ function AgentVaultVisual() {
 
 function CompactEmptyMark() {
   return (
-    <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-white/10 bg-white/[0.04] text-violet-200">
-      <Box className="h-7 w-7" />
+    <div className="mx-auto grid h-11 w-11 place-items-center rounded-xl border border-white/10 bg-white/[0.035] text-violet-200">
+      <Box className="h-5 w-5" />
+    </div>
+  );
+}
+
+function CompactReceiptMark() {
+  return (
+    <div className="mx-auto grid h-11 w-11 place-items-center rounded-xl border border-white/10 bg-white/[0.035] text-violet-200">
+      <ReceiptText className="h-5 w-5" />
     </div>
   );
 }
@@ -792,11 +799,11 @@ export function ReceiptsSection({ receipts }: { receipts: CommandCenterReceipt[]
                 </table>
               </DataTableShell>
             ) : (
-              <div className="grid min-h-[360px] place-items-center rounded-xl border border-white/[0.07] bg-white/[0.025] text-center">
-                <div>
-                  <HeroCore variant="document" className="mx-auto min-h-[220px] w-full max-w-md" />
-                  <h3 className="mt-2 text-[24px] font-semibold text-white">No receipts yet</h3>
-                  <p className="mx-auto mt-2 max-w-sm text-[15px] leading-6 text-slate-400">Settlement receipts from your executions will appear here once they are confirmed on-chain.</p>
+              <div className="grid min-h-[220px] place-items-center rounded-xl border border-dashed border-white/[0.09] bg-white/[0.018] p-6 text-center">
+                <div className="max-w-sm">
+                  <CompactReceiptMark />
+                  <h3 className="mt-4 text-[20px] font-semibold text-white">No receipts yet</h3>
+                  <p className="mx-auto mt-2 text-[14px] leading-6 text-slate-500">Settlement receipts from confirmed executions will appear here.</p>
                 </div>
               </div>
             )}
@@ -808,7 +815,15 @@ export function ReceiptsSection({ receipts }: { receipts: CommandCenterReceipt[]
             <PanelTitle>Receipt Details</PanelTitle>
             {selected ? (
               <div className="mt-5 space-y-3">
-                <HeroCore variant="document" className="min-h-[220px]" />
+                <div className="flex items-center gap-3 rounded-xl border border-white/[0.07] bg-white/[0.025] p-4">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-violet-200">
+                    <ReceiptText className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-[15px] font-medium text-white">{compactAddress(selected.id)}</div>
+                    <div className="mt-1 text-[13px] text-slate-500">Settlement proof</div>
+                  </div>
+                </div>
                 <MetricRow label="Receipt" value={selected.id} />
                 <MetricRow label="MagicBlock Rail" value={formatMagicBlockStatus(selected)} />
                 <MetricRow label="Mode" value={formatReceiptMagicBlockMode(selected)} />
@@ -1005,11 +1020,15 @@ export function AgentTable({
 export function VaultTable({ agents, isSubmitting, useAgent }: { agents: CommandCenterAgent[]; isSubmitting: boolean; useAgent: (agentId: string) => void }) {
   if (agents.length === 0) {
     return (
-      <div className="grid min-h-[220px] place-items-center rounded-xl border border-dashed border-white/[0.10] bg-white/[0.025] p-8 text-center">
+      <div className="grid min-h-[190px] place-items-center rounded-xl border border-dashed border-white/[0.10] bg-white/[0.018] p-6 text-center">
         <div className="max-w-sm">
           <CompactEmptyMark />
-          <h3 className="mt-4 text-[24px] font-semibold text-white">No agent vaults yet</h3>
-          <p className="mt-2 text-[15px] text-slate-500">Create your first agent vault to automate spending with guardrails.</p>
+          <h3 className="mt-4 text-[20px] font-semibold text-white">No agent vaults yet</h3>
+          <p className="mt-2 text-[14px] text-slate-500">Create your first vault to automate spending with guardrails.</p>
+          <ControlButton onClick={() => document.getElementById("agent-vault-name")?.focus()} className="mt-4 w-auto whitespace-nowrap px-4">
+            <Plus className="h-4 w-4" />
+            Add Agent Vault
+          </ControlButton>
         </div>
       </div>
     );
@@ -1215,18 +1234,18 @@ export function SimulatorPanel({
           </div>
 
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <GlowPanel className="p-4" intensity="quiet">
+            <div className="rounded-xl border border-white/[0.07] bg-white/[0.022] p-4">
               <PanelTitle>Route Preview</PanelTitle>
               <div className="mt-5 grid grid-cols-4 gap-2 text-center text-[12px] text-slate-500">
                 {["Spender", "Approval", "Policy", "Recipient"].map((item, index) => (
                   <div key={item} className="min-w-0">
-                    <div className="mx-auto grid h-12 w-12 place-items-center rounded-full border border-violet-300/25 bg-violet-500/12 text-violet-200">{index + 1}</div>
+                    <div className="mx-auto grid h-9 w-9 place-items-center rounded-full border border-slate-600/70 bg-[#071127]/74 text-slate-300">{index + 1}</div>
                     <div className="mt-2 truncate">{item}</div>
                   </div>
                 ))}
               </div>
-            </GlowPanel>
-            <GlowPanel className="p-4" intensity="quiet">
+            </div>
+            <div className="rounded-xl border border-white/[0.07] bg-white/[0.022] p-4">
               <PanelTitle>Policy Outcome</PanelTitle>
               <div className="mt-4">
                 <ValidationChecklist
@@ -1237,7 +1256,7 @@ export function SimulatorPanel({
                   ]}
                 />
               </div>
-            </GlowPanel>
+            </div>
           </div>
 
           <div className="mt-4 grid gap-4 md:grid-cols-3">
@@ -1392,24 +1411,34 @@ export function SettingsSection({
       </div>
 
       <GlowPanel className="p-5" intensity="quiet">
-        <div className="grid gap-5 lg:grid-cols-[minmax(220px,0.34fr)_minmax(0,1fr)] lg:items-center">
-          <div className="flex items-center gap-4 rounded-xl border border-violet-300/14 bg-violet-500/8 p-4">
-            <ConfigIcon icon={<SlidersHorizontal />} />
-            <div className="min-w-0">
-              <div className="text-[15px] font-semibold text-white">Configuration Insights</div>
-              <p className="mt-1 text-[13px] text-slate-500">Current runtime and recipient readiness.</p>
-            </div>
-          </div>
+        <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <div className="grid gap-3 md:grid-cols-4">
-              <SoftMetric label="Network Status" value="Connected" />
-              <SoftMetric label="API Health" value="200 OK" />
-              <SoftMetric label="Configuration" value={tab === "docs" ? "Docs linked" : "Valid"} />
-              <SoftMetric label="Recipients" value={`${recipients.length} total`} />
-            </div>
+            <PanelTitle>Configuration Insights</PanelTitle>
+            <p className="mt-2 text-[14px] text-slate-500">Current runtime and recipient readiness.</p>
           </div>
+          <StatusBadge status="active">Healthy</StatusBadge>
+        </div>
+        <div className="grid gap-3 md:grid-cols-4">
+          <ConfigInsightCard icon={<Globe2 />} label="Network" value="Connected" />
+          <ConfigInsightCard icon={<Link2 />} label="API" value="200 OK" />
+          <ConfigInsightCard icon={<BadgeInfo />} label="Configuration" value={tab === "docs" ? "Docs linked" : "Valid"} />
+          <ConfigInsightCard icon={<Wallet />} label="Recipients" value={`${recipients.length} total`} />
         </div>
       </GlowPanel>
+    </div>
+  );
+}
+
+function ConfigInsightCard({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex min-w-0 items-center gap-3 rounded-xl border border-white/[0.07] bg-white/[0.025] p-4">
+      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/[0.035] text-violet-200 [&_svg]:h-4 [&_svg]:w-4">
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <div className="text-[13px] text-slate-500">{label}</div>
+        <div className="truncate text-[15px] font-medium text-white" title={value}>{value}</div>
+      </div>
     </div>
   );
 }

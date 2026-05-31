@@ -10,7 +10,7 @@ import type { Notice } from "./types";
 
 export function Panel({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <section className={cn("min-w-0 rounded-2xl border border-slate-700/60 bg-gradient-to-br from-slate-900/70 via-slate-950/60 to-slate-950/90 p-5 shadow-[0_0_40px_rgba(124,58,237,0.08)] backdrop-blur-xl", className)}>
+    <section className={cn("min-w-0 rounded-2xl border border-slate-700/45 bg-[linear-gradient(145deg,rgba(10,18,34,0.84),rgba(4,9,20,0.90))] p-5 shadow-[0_14px_36px_rgba(0,0,0,0.16)] backdrop-blur-xl", className)}>
       {children}
     </section>
   );
@@ -72,8 +72,8 @@ export function MiniSigil() {
 export function ShieldSigil({ large = false }: { large?: boolean }) {
   return (
     <div className={cn("relative flex items-center justify-center", large ? "h-56" : "h-36")}>
-      <ShieldCheck className={cn("absolute text-violet-300/20", large ? "h-52 w-52" : "h-36 w-36")} strokeWidth={0.8} />
-      <Sigil className={cn("drop-shadow-[0_0_24px_rgba(168,85,247,0.9)]", large ? "h-28 w-28" : "h-20 w-20")} />
+      <ShieldCheck className={cn("absolute text-violet-300/16", large ? "h-52 w-52" : "h-36 w-36")} strokeWidth={0.8} />
+      <Sigil className={cn(large ? "h-28 w-28" : "h-20 w-20")} />
     </div>
   );
 }
@@ -94,7 +94,7 @@ export function AllowanceRing({
   return (
     <div
       className={cn(
-        "relative grid shrink-0 place-items-center rounded-full bg-[conic-gradient(from_180deg,#A970FF_var(--pct),rgba(255,255,255,0.08)_0)] p-[3px] shadow-[0_0_40px_rgba(139,74,255,0.42)]",
+        "relative grid shrink-0 place-items-center rounded-full bg-[conic-gradient(from_180deg,#A970FF_var(--pct),rgba(255,255,255,0.08)_0)] p-[3px] shadow-[0_0_30px_rgba(139,74,255,0.24)]",
         sizeClassName
       )}
       style={{ "--pct": `${pct}%` } as CSSProperties}
@@ -189,7 +189,7 @@ export function SidebarFooterLink({ children, href, label }: { children: ReactNo
       rel={href === "#" ? undefined : "noreferrer"}
       title={label}
       aria-label={label}
-      className="smooth-control grid h-10 w-10 place-items-center rounded-lg border border-white/10 bg-[#071121]/72 text-violet-100/64 hover:border-violet-300/24 hover:bg-violet-400/8 hover:text-white hover:shadow-[0_0_18px_rgba(167,139,250,0.12)]"
+      className="smooth-control grid h-10 w-10 place-items-center rounded-lg border border-white/10 bg-[#071121]/72 text-violet-100/64 hover:border-violet-300/24 hover:bg-violet-400/8 hover:text-white"
     >
       {children}
     </a>
@@ -445,10 +445,10 @@ export function GlowPanel({
   return (
     <section
       className={cn(
-        "relative min-w-0 overflow-hidden rounded-2xl border border-slate-700/60 bg-gradient-to-br from-slate-900/70 via-slate-950/60 to-slate-950/90 shadow-[0_0_40px_rgba(124,58,237,0.08)] backdrop-blur-xl",
-        "before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_18%_0%,rgba(124,58,237,0.13),transparent_34%),radial-gradient(circle_at_90%_10%,rgba(59,130,246,0.08),transparent_28%)] before:opacity-70",
-        intensity === "strong" ? "border-violet-300/20 shadow-[0_0_54px_rgba(124,58,237,0.14),0_22px_72px_rgba(0,0,0,0.32)] before:opacity-100" : "",
-        intensity === "quiet" ? "before:opacity-35" : "",
+        "relative min-w-0 overflow-hidden rounded-2xl border border-slate-700/45 bg-[linear-gradient(145deg,rgba(10,18,34,0.84),rgba(4,9,20,0.90))] shadow-[0_18px_48px_rgba(0,0,0,0.20)] backdrop-blur-xl",
+        "before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(135deg,rgba(255,255,255,0.035),transparent_36%)] before:opacity-55",
+        intensity === "strong" ? "border-violet-300/18 shadow-[0_24px_70px_rgba(0,0,0,0.30),0_0_34px_rgba(124,58,237,0.08)] before:opacity-80" : "",
+        intensity === "quiet" ? "border-slate-700/38 shadow-[0_14px_36px_rgba(0,0,0,0.16)] before:opacity-20" : "",
         className
       )}
     >
@@ -512,7 +512,7 @@ export function TopStatusBar({
   return (
     <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
       <StatusPill icon={<Network className="h-4 w-4 text-blue-300" />} label={networkLabel} className="w-full border-blue-300/16 bg-blue-500/8 text-blue-100 sm:w-auto" />
-      <StatusPill icon={<span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.65)]" />} label={runtimeLabel} className="w-full border-emerald-300/16 bg-emerald-500/8 text-emerald-100 sm:w-auto" />
+      <StatusPill icon={<span className="h-2 w-2 rounded-full bg-emerald-400" />} label={runtimeLabel} className="w-full border-emerald-300/16 bg-emerald-500/8 text-emerald-100 sm:w-auto" />
       <HeaderWalletButton connected={connected} connecting={connecting} onClick={onWalletAction} />
     </div>
   );
@@ -564,16 +564,13 @@ export function HeroCore({
   return (
     <div className={cn("relative grid min-h-[260px] place-items-center overflow-hidden", className)} aria-hidden="true">
       <div className="hero-core-aura absolute inset-0" />
-      <div className="absolute bottom-8 h-10 w-64 rounded-full border border-violet-300/16 bg-violet-500/8 blur-[1px] shadow-[0_0_42px_rgba(124,58,237,0.22)]" />
-      <div className="hero-orbit absolute h-60 w-60 rounded-full border border-violet-200/12" />
-      <div className="hero-orbit absolute h-72 w-72 rotate-12 rounded-full border border-blue-200/8 [animation-delay:-2.4s]" />
-      <div className="absolute h-40 w-40 rounded-full border border-violet-200/14 shadow-[0_0_42px_rgba(124,58,237,0.12)]" />
+      <div className="absolute h-56 w-56 rounded-full border border-slate-500/14" />
       <div className="relative grid place-items-center">
         {isShield ? (
           <div className="hero-shield-field relative h-48 w-48">
-            <span className="absolute inset-8 rounded-[34%_34%_44%_44%/26%_26%_60%_60%] border border-violet-200/28 bg-[linear-gradient(160deg,rgba(124,58,237,0.22),rgba(14,165,233,0.08)_48%,rgba(2,6,23,0.62))] shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_0_34px_rgba(124,58,237,0.22)]" />
-            <span className="absolute inset-x-12 top-16 h-px bg-violet-200/50" />
-            <span className="absolute inset-x-14 top-24 h-px bg-blue-200/30" />
+            <span className="absolute inset-8 rounded-[34%_34%_44%_44%/26%_26%_60%_60%] border border-violet-200/24 bg-[linear-gradient(160deg,rgba(124,58,237,0.18),rgba(14,165,233,0.06)_48%,rgba(2,6,23,0.72))] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]" />
+            <span className="absolute inset-x-12 top-16 h-px bg-violet-200/42" />
+            <span className="absolute inset-x-14 top-24 h-px bg-blue-200/24" />
           </div>
         ) : isCube ? (
           <div className="agent-vault-core">
@@ -584,9 +581,7 @@ export function HeroCore({
             </div>
           </div>
         ) : isOrb ? (
-          <div className="relative grid h-64 w-64 place-items-center rounded-full bg-[conic-gradient(from_210deg,#8B5CF6_0deg,#C4B5FD_118deg,rgba(59,130,246,0.34)_206deg,rgba(255,255,255,0.08)_360deg)] p-[2px] shadow-[0_0_54px_rgba(124,58,237,0.28)]">
-            <div className="absolute inset-5 rounded-full border border-violet-200/12" />
-            <div className="absolute inset-10 rounded-full border border-blue-200/10" />
+          <div className="relative grid h-64 w-64 place-items-center rounded-full bg-[conic-gradient(from_210deg,#8B5CF6_0deg,#C4B5FD_116deg,rgba(59,130,246,0.24)_206deg,rgba(255,255,255,0.07)_360deg)] p-[2px] shadow-[0_0_34px_rgba(124,58,237,0.16)]">
             <div className="grid h-full w-full place-items-center rounded-full border border-white/[0.08] bg-[radial-gradient(circle_at_50%_36%,rgba(124,58,237,0.24),rgba(5,10,25,0.94)_64%)]">
               <div className="text-center">
                 {label ? <div className="text-[12px] font-medium tracking-[0.14em] text-violet-200/75">{label}</div> : null}
@@ -626,7 +621,7 @@ export function HeroCore({
         ) : (
           <div className="hero-star-core relative grid h-44 w-44 place-items-center">
             <span className="absolute h-36 w-36 rounded-full border border-violet-200/14" />
-            <span className="absolute h-20 w-20 rounded-full bg-[radial-gradient(circle,#f5d8ff_0%,#a78bfa_34%,rgba(124,58,237,0.22)_62%,transparent_72%)] shadow-[0_0_52px_rgba(167,139,250,0.46)]" />
+            <span className="absolute h-20 w-20 rounded-full bg-[radial-gradient(circle,#f5d8ff_0%,#a78bfa_34%,rgba(124,58,237,0.18)_62%,transparent_72%)] shadow-[0_0_34px_rgba(167,139,250,0.28)]" />
             <span className="absolute h-px w-40 bg-gradient-to-r from-transparent via-violet-100/70 to-transparent" />
             <span className="absolute h-40 w-px bg-gradient-to-b from-transparent via-violet-100/60 to-transparent" />
           </div>
@@ -659,15 +654,15 @@ export function Timeline({ items }: { items: { label: string; detail: string; st
     <div className="grid gap-4 md:grid-cols-5">
       {items.map((item, index) => (
         <div key={item.label} className="relative min-w-0">
-          {index < items.length - 1 ? <div className="absolute left-6 top-6 hidden h-px w-[calc(100%+1rem)] bg-violet-400/50 md:block" /> : null}
+          {index < items.length - 1 ? <div className="absolute left-6 top-6 hidden h-px w-[calc(100%+1rem)] bg-slate-700/80 md:block" /> : null}
           <div className="relative z-10 flex flex-col gap-3">
             <div
               className={cn(
                 "grid h-12 w-12 place-items-center rounded-full border bg-[#0A1530]",
-                item.status === "muted" ? "border-dashed border-slate-500/60 text-slate-500" : "border-violet-300/70 text-violet-100 shadow-[0_0_24px_rgba(124,58,237,0.55)]"
+                item.status === "muted" ? "border-dashed border-slate-600/70 text-slate-500" : "border-slate-500/65 text-violet-100"
               )}
             >
-              <Sparkles className="h-4 w-4" />
+              <CheckCircle2 className="h-4 w-4" />
             </div>
             <div>
               <div className="font-medium text-white">{item.label}</div>

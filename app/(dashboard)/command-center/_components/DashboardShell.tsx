@@ -201,7 +201,7 @@ export function Sidebar({ activeSection, setActiveSection }: { activeSection: Se
     <aside className="hidden min-w-0 border-r border-[#25345E] bg-[#040B19]/78 px-6 py-7 shadow-[inset_-1px_0_0_rgba(255,255,255,0.02)] backdrop-blur-xl lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col">
       <div className="flex h-full flex-col gap-7">
         <div className="flex items-center gap-3">
-          <Sigil className="h-12 w-12 drop-shadow-[0_0_20px_rgba(168,85,247,0.85)]" />
+          <Sigil className="h-12 w-12" />
           <div>
             <div className="text-[17px] font-semibold uppercase tracking-[0.11em] text-white">WhisperVault</div>
           </div>
@@ -209,7 +209,7 @@ export function Sidebar({ activeSection, setActiveSection }: { activeSection: Se
         <NavList activeSection={activeSection} setActiveSection={setActiveSection} orientation="vertical" />
         <div className="mt-auto space-y-5">
           <StatusPill
-            icon={<span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.9)]" />}
+            icon={<span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />}
             label="Devnet Connected"
             className="w-full justify-start"
           />
