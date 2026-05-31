@@ -198,7 +198,7 @@ export function OverviewCards({
           </div>
           <div className="relative grid min-h-[260px] place-items-center overflow-hidden rounded-2xl border border-white/[0.07] bg-[#06111f]/54 p-6 sm:min-h-[320px] lg:min-h-[360px]">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_46%,rgba(124,58,237,0.16),transparent_48%)]" />
-            <ProductVisual kind="overview" size="lg" />
+            <ProductVisual kind="overview" size="hero" priority />
           </div>
         </div>
       </GlowPanel>
@@ -449,7 +449,7 @@ export function FirewallSection({
           </div>
           <div className="relative grid min-h-[260px] place-items-center overflow-hidden rounded-2xl border border-white/[0.07] bg-[#06111f]/54 p-6 lg:min-h-[300px]">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_46%,rgba(16,185,129,0.12),rgba(124,58,237,0.10)_42%,transparent_68%)]" />
-            <ProductVisual kind="firewall" size="lg" />
+            <ProductVisual kind="firewall" size="hero" />
           </div>
         </div>
       </GlowPanel>
@@ -588,6 +588,7 @@ export function ExecutionsSection({
 }) {
   const [queueTab, setQueueTab] = useState<"queue" | "history">("queue");
   const queueReceipts = receipts.filter((receipt) => queueTab === "history" || receipt.status === "pending" || receipt.status === "pending_execution");
+  const hasPendingPreview = Boolean(spendResult || spendAmount || spendGoal || spendRecipient);
 
   return (
     <div className="space-y-5">
@@ -631,20 +632,31 @@ export function ExecutionsSection({
           <GlowPanel className="p-5 sm:p-6" intensity="quiet">
             <StepTitle step="2" title="Pending Execution / Preview" detail="Review the transaction that will be executed by your agent." />
             <div className="mt-5 grid gap-4 md:grid-cols-[minmax(0,0.82fr)_minmax(0,1fr)]">
-              <div className="relative overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.03] p-4">
-                <ProductVisual kind="executions" size="sm" className="absolute -right-3 -top-4 opacity-55" />
-                <div className="flex items-center gap-3">
-                  <ConfigIcon icon={<Bot />} />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13px] text-slate-500">Route</div>
-                    <div className="mt-1 truncate text-[15px] font-medium text-white">Agent to allowlisted recipient</div>
+              <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-4">
+                {hasPendingPreview ? (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <ConfigIcon icon={<Bot />} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13px] text-slate-500">Route</div>
+                        <div className="mt-1 truncate text-[15px] font-medium text-white">Agent to allowlisted recipient</div>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center text-[12px] text-slate-500">
+                      <span className="truncate rounded-lg border border-white/[0.07] bg-[#06111f]/70 px-2 py-2">Agent</span>
+                      <ArrowRight className="h-4 w-4 text-violet-200" />
+                      <span className="truncate rounded-lg border border-white/[0.07] bg-[#06111f]/70 px-2 py-2">Recipient</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="grid min-h-[168px] place-items-center text-center">
+                    <div>
+                      <ProductVisual kind="executions" size="md" className="mx-auto opacity-85" />
+                      <div className="mt-3 text-[15px] font-medium text-white">Awaiting spend intent</div>
+                      <p className="mt-1 text-[13px] leading-5 text-slate-500">The execution route preview appears after an intent is drafted.</p>
+                    </div>
                   </div>
-                </div>
-                <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center text-[12px] text-slate-500">
-                  <span className="truncate rounded-lg border border-white/[0.07] bg-[#06111f]/70 px-2 py-2">Agent</span>
-                  <ArrowRight className="h-4 w-4 text-violet-200" />
-                  <span className="truncate rounded-lg border border-white/[0.07] bg-[#06111f]/70 px-2 py-2">Recipient</span>
-                </div>
+                )}
               </div>
               <div className="space-y-3">
                 <MetricRow label="From (Agent Wallet)" value={compactAddress(activeAgent?.id)} />
@@ -785,7 +797,7 @@ export function ReceiptsSection({ receipts }: { receipts: CommandCenterReceipt[]
             ) : (
               <div className="grid min-h-[220px] place-items-center rounded-xl border border-dashed border-white/[0.09] bg-white/[0.018] p-6 text-center">
                 <div className="max-w-sm">
-                  <ProductVisual kind="receipts" size="sm" className="mx-auto" />
+                  <ProductVisual kind="receipts" size="md" className="mx-auto" />
                   <h3 className="mt-4 text-[20px] font-semibold text-white">No receipts yet</h3>
                   <p className="mx-auto mt-2 text-[14px] leading-6 text-slate-500">Settlement receipts from confirmed executions will appear here.</p>
                 </div>
@@ -889,7 +901,7 @@ export function AgentsSection({
               </div>
               <div className="relative grid min-h-[250px] place-items-center overflow-hidden rounded-2xl border border-white/[0.07] bg-[#06111f]/64 p-5">
                 <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(124,58,237,0.12),transparent_48%)]" />
-                <ProductVisual kind="agents" size="lg" className="opacity-85" />
+                <ProductVisual kind="agents" size="hero" className="opacity-85" />
                 <div className="absolute bottom-5 flex items-center gap-2 rounded-full border border-violet-300/18 bg-slate-950/74 px-3 py-1.5 text-[12px] text-violet-100">
                   <LockKeyhole className="h-3.5 w-3.5" />
                   Policy-contained vault
@@ -1201,7 +1213,7 @@ export function SimulatorPanel({
         <GlowPanel className="p-5" intensity="quiet">
           <PanelTitle>Simulation Result</PanelTitle>
           <div className="mt-5 rounded-xl border border-white/[0.08] bg-white/[0.045] p-5">
-            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_190px] lg:items-center">
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_150px_190px] lg:items-center">
               <div className="flex items-center gap-4">
                 <div className={isBlocked ? "grid h-16 w-16 place-items-center rounded-2xl border border-red-300/28 bg-red-500/10 text-red-300" : "grid h-16 w-16 place-items-center rounded-2xl border border-emerald-300/24 bg-emerald-500/9 text-emerald-300"}>
                   {isBlocked ? <ShieldX className="h-9 w-9" /> : <ShieldCheck className="h-9 w-9" />}
@@ -1213,9 +1225,11 @@ export function SimulatorPanel({
                   <p className="mt-1 text-[15px] text-slate-400">{simulatorResult?.reason ?? "Run a dry simulation to inspect policy outcome."}</p>
                 </div>
               </div>
-              <div className="relative grid min-h-[158px] place-items-center overflow-hidden rounded-2xl border border-white/[0.08] bg-[#06111f]/70 p-4 text-center">
-                <ProductVisual kind="simulator" size="md" className="absolute opacity-45" />
-                <div className={cn("relative grid h-24 w-24 place-items-center rounded-full border bg-slate-950/72 backdrop-blur-sm", simulatorResult ? "border-emerald-300/25 text-emerald-200" : "border-slate-600/60 text-slate-400")}>
+              <div className="hidden min-h-[132px] place-items-center rounded-2xl border border-white/[0.08] bg-[#06111f]/54 p-3 lg:grid">
+                <ProductVisual kind="simulator" size="md" className="opacity-85" />
+              </div>
+              <div className="grid min-h-[132px] place-items-center rounded-2xl border border-white/[0.08] bg-[#06111f]/70 p-4 text-center">
+                <div className={cn("grid h-24 w-24 place-items-center rounded-full border bg-slate-950/72 backdrop-blur-sm", simulatorResult ? "border-emerald-300/25 text-emerald-200" : "border-slate-600/60 text-slate-400")}>
                   <div>
                     <div className="text-[28px] font-semibold leading-none">{simulatorResult ? "98%" : "--"}</div>
                     <div className="mt-1 text-[11px] uppercase tracking-[0.12em]">confidence</div>
